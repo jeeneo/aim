@@ -1,0 +1,58 @@
+<resources>
+    <string name="app_name">AIM</string>
+
+    <!-- Preference headers -->
+    <string name="pref_header_environment">Environment</string>
+    <string name="pref_header_images">Images</string>
+    <string name="pref_header_active_mounts">Mounts</string>
+    <string name="pref_header_about">About</string>
+
+    <!-- Environment preferences -->
+    <string name="pref_root_status_name">Root access</string>
+    <string name="pref_busybox_status_name">Busybox</string>
+    <string name="pref_retry_checks_name">Retry environment checks</string>
+    <string name="pref_retry_checks_desc">Check for root and busybox again</string>
+
+    <!-- Images category -->
+    <string name="pref_add_image_name">Add image</string>
+    <string name="pref_add_image_desc">Add a new .img or .iso file</string>
+    <string name="pref_expose_saf_name">Documents provider</string>
+    <string name="pref_expose_storage_name">Internal storage</string>
+    <string name="dialog_expose_heading">Expose</string>
+    <string name="dialog_actions_heading">Actions</string>
+
+    <string name="pref_bindmount_dir_name">Storage mount directory</string>
+    <string name="pref_header_settings">Settings</string>
+    <string name="pref_apply_settings_name">Apply settings</string>
+    <string name="pref_apply_settings_desc">Mount/unmount images according to current toggles</string>
+    <string name="pref_format_ext4_name">Format to EXT4</string>
+    <string name="pref_change_partition_name">Change partition</string>
+
+    <!-- Dialog strings -->
+    <string name="dialog_format_title">Format image?</string>
+    <string name="dialog_format_message">This will erase ALL data on \"%s\" and create an empty ext4 filesystem. This cannot be undone.</string>
+    <string name="dialog_format_confirm">Format</string>
+    <string name="dialog_remove_image">Remove image</string>
+    <string name="dialog_close">Close</string>
+    <string name="dialog_cancel">Cancel</string>
+    <string name="dialog_save">Save</string>
+    <string name="dialog_bind_dir_title">Storage mounts</string>
+    <string name="dialog_bind_dir_description">Directory where mounts are bind-mounted so they appear in internal storage</string>
+    <!-- <string name="dialog_bind_dir_constraint">Must be under /data/media/, /storage/emulated/, /sdcard/, or /mnt/media_rw/.</string> -->
+    <plurals name="dialog_partition_description">
+        <!-- <item quantity="one">This %2$s formatted image contains %1$d partition</item> -->
+        <item quantity="other">This %2$s formatted image contains %1$d partitions, which one should be mounted?</item>
+    </plurals>
+    <string name="dialog_partition_mount">Select</string>
+    <string name="dialog_partition_boot">boot</string>
+    <string name="dialog_partition_unsupported">unsupported</string>
+
+    <!-- About -->
+    <string name="pref_version_name">Version</string>
+
+    <string name="pref_no_images_name">No images</string>
+    <string name="pref_no_images_desc">No images added yet</string>
+    <string name="mounted_images_title">Mounted images</string>
+    <string name="pref_no_mounts_name">No mounts</string>
+    <string name="pref_no_mounts_desc">No images mounted</string>
+</resources>
