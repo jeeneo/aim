@@ -26,6 +26,7 @@ private const val TAG = "FsDetector"
 internal val VALID_FAT_BPS = setOf("0002", "0004", "0008", "0010")
 internal val VALID_FAT_NFATS = setOf("01", "02")
 private const val EXFAT_OEM_HEX = "4558464154" // "EXFAT"
+private const val NTFS_OEM_HEX = "4e544653" // "NTFS"
 private const val EXT4_MAGIC_HEX = "53ef"
 private const val FAT_SIG_HEX = "55aa"
 private const val ISO_MAGIC_HEX = "4344303031" // "CD001"
@@ -74,6 +75,12 @@ fun detectFsByMagic(probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALU
         return null
     }
     if (sizeBytes > 33000 && probe(32769, 5) == ISO_MAGIC_HEX) return FsType.ISO9660
+    return null
+}
+
+// identify known-but-unsupported filesystems by magic bytes
+fun identifyUnsupportedFs(probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALUE): String? {
+    if (probe(3, 4) == NTFS_OEM_HEX) return "NTFS"
     return null
 }
 

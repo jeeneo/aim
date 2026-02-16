@@ -26,7 +26,7 @@ private val PARTITION_TYPE_NAMES = mapOf(
     0x04 to "FAT16 (<32 MB)",
     0x05 to "Extended",
     0x06 to "FAT16",
-    0x07 to "exFAT", // NTFS/exFAT/HPFS, exFAT only supported like fr
+    0x07 to "NTFS/exFAT/HPFS",
     0x0B to "FAT32 (CHS)",
     0x0C to "FAT32 (LBA)",
     0x0E to "FAT16 (LBA)",
@@ -72,10 +72,18 @@ data class PartitionEntry(
     val offsetBytes: Long, // startLBA * 512
     val sizeBytes: Long, // sizeSectors * 512
     val detectedFs: FsType? = null,
+    val detectedFsName: String? = null,
     val label: String? = null,
 )
 
 enum class PartitionScheme { MBR, GPT }
+
+private fun fsDisplayName(fs: FsType): String = when (fs) {
+    FsType.EXT4 -> "ext4"
+    FsType.VFAT -> "FAT"
+    FsType.EXFAT -> "exFAT"
+    FsType.ISO9660 -> "ISO 9660" // not really supported on most devices
+}
 
 data class PartitionTableInfo(
     val partitions: List<PartitionEntry>,
@@ -168,11 +176,13 @@ fun probePartitionFilesystems(imagePath: String, partitions: List<PartitionEntry
         val rawLabel = (if (detected != null) probeLabel(::probe, detected, part.sizeBytes) else null) ?: part.label
         val label = labelToMountStem(rawLabel)
         if (detected != null) {
+            val refinedTypeName = fsDisplayName(detected)
             Log.d(TAG, "P${part.index}: ${detected.mountType}" + if (label != null) " label='$label'" else "")
-            part.copy(detectedFs = detected, label = label)
+            part.copy(detectedFs = detected, detectedFsName = detected.mountType, typeName = refinedTypeName, label = label)
         } else {
-            Log.d(TAG, "P${part.index}: unknown fs (type=0x${"%02X".format(part.typeId)})")
-            part
+            val fsName = identifyUnsupportedFs(::probe, part.sizeBytes)
+            Log.d(TAG, "P${part.index}: ${fsName ?: "unknown"} fs (type=0x${"%02X".format(part.typeId)})")
+            part.copy(detectedFsName = fsName, typeName = fsName ?: part.typeName)
         }
     }
 }

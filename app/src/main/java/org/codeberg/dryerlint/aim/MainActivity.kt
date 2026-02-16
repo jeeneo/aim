@@ -53,7 +53,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -81,20 +80,8 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AimApp(viewModel: AimViewModel = viewModel()) {
-    val context = LocalContext.current
-    // quick dirty parse to copy UI design
     val versionName = remember {
-        try {
-            val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName
-            val cleanVersion = version?.replace(Regex("(?i)[.\\-]?debug.*"), "")
-            if (cleanVersion != null && version.contains("debug", ignoreCase = true)) {
-                "$cleanVersion (debug)"
-            } else {
-                version ?: "unknown"
-            }
-        } catch (_: Exception) {
-            "unknown"
-        }
+        "${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TYPE})"
     }
     val snackbarHostState = remember { SnackbarHostState() }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()

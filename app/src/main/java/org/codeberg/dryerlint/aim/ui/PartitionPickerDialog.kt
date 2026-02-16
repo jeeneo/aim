@@ -103,11 +103,13 @@ fun PartitionPickerDialog(
                             .padding(vertical = 6.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        RadioButton(
-                            selected = selected == idx,
-                            onClick = if (mountable) ({ selected = idx }) else null,
-                            enabled = mountable,
-                        )
+                        Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
+                            RadioButton(
+                                selected = selected == idx,
+                                onClick = if (mountable) ({ selected = idx }) else null,
+                                enabled = mountable,
+                            )
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
