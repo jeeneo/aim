@@ -10,6 +10,7 @@
     <!-- Environment preferences -->
     <string name="pref_root_status_name">Root access</string>
     <string name="pref_busybox_status_name">Busybox</string>
+    <string name="pref_root_busybox_status_name">Root and Busybox</string>
     <string name="pref_retry_checks_name">Retry environment checks</string>
     <string name="pref_retry_checks_desc">Check for root and busybox again</string>
 

@@ -25,6 +25,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -72,6 +73,7 @@ import org.codeberg.dryerlint.aim.ui.theme.AimTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        installSplashScreen()
         enableEdgeToEdge()
         setContent { AimTheme { AimApp() } }
     }
@@ -81,11 +83,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AimApp(viewModel: AimViewModel = viewModel()) {
     val versionName = remember {
-        "${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TYPE})"
+        val version = BuildConfig.VERSION_NAME.removeSuffix(".debug")
+        "$version (${BuildConfig.BUILD_TYPE})"
     }
     val snackbarHostState = remember { SnackbarHostState() }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
-
     val canAct by viewModel.canAct.collectAsState()
     val envStatus by viewModel.envStatus.collectAsState()
     val envChecked by viewModel.envChecked.collectAsState()
@@ -170,18 +172,16 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
                     item(key = "cat_env") {
                         PreferenceCategory(title = stringResource(R.string.pref_header_environment)) {
                             PreferenceItem(
-                                title = stringResource(R.string.pref_root_status_name),
-                                summary = envStatus.rootMessage,
+                                title = stringResource(R.string.pref_root_busybox_status_name),
+                                summary = buildString {
+                                    append(envStatus.rootMessage)
+                                    append("\n")
+                                    append(envStatus.busyboxMessage)
+                                    if (envStatus.busyboxPath.isNotBlank()) append(" (${envStatus.busyboxPath})")
+                                },
                                 enabled = canAct,
-                                summaryColor = if (envStatus.rootAvailable) MaterialTheme.colorScheme.onSurfaceVariant
-                                else MaterialTheme.colorScheme.error
-                            )
-                            PreferenceItem(
-                                title = stringResource(R.string.pref_busybox_status_name),
-                                summary = buildString { append(envStatus.busyboxMessage)
-                                if (envStatus.busyboxPath.isNotBlank()) append(" (${envStatus.busyboxPath})") },
-                                enabled = canAct,
-                                summaryColor = if (envStatus.busyboxAvailable) MaterialTheme.colorScheme.onSurfaceVariant
+                                summaryColor = if (envStatus.rootAvailable && envStatus.busyboxAvailable) 
+                                    MaterialTheme.colorScheme.onSurfaceVariant
                                 else MaterialTheme.colorScheme.error
                             )
                             PreferenceItem(
@@ -237,7 +237,14 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
                         if (mountedImages.isNotEmpty()) {
                             val mountsSummary = mountedImages.joinToString("\n") { img ->
                                 val stem = img.mountedImage?.mountPoint?.substringAfterLast('/') ?: img.displayName
-                                val paths = mountAccessPaths(img, stem, bindDir)
+                                val paths = buildList {
+                                    if (img.isExposed) add("content://aim/$stem")
+                                    if (img.isStorageExposed) add(when {
+                                        bindDir.startsWith("/mnt/media_rw") -> "/mnt/media_rw/$stem"
+                                        else -> "$bindDir/$stem"
+                                    })
+                                    if (isEmpty()) add("internal/mounts/$stem")
+                                }
                                 "${img.displayName} (${paths.joinToString(", ")})"
                             }
                             PreferenceItem(
@@ -283,9 +290,11 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
                 }
                 item(key = "cat_about") {
                     PreferenceCategory(title = stringResource(R.string.pref_header_about)) {
+                        val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
                         PreferenceItem(
                             title = stringResource(R.string.pref_version_name),
-                            summary = versionName
+                            summary = versionName,
+                            onClick = { uriHandler.openUri("https://codeberg.org/dryerlint/AIM") }
                         )
                     }
                 }
@@ -295,13 +304,4 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
             }
         }
     }
-}
-
-private fun mountAccessPaths(img: ImageInfo, stem: String, bindDir: String): List<String> = buildList {
-    if (img.isExposed) add("content://aim/$stem")
-    if (img.isStorageExposed) add(when {
-        bindDir.startsWith("/mnt/media_rw") -> "/mnt/media_rw/$stem"
-        else -> "$bindDir/$stem"
-    })
-    if (isEmpty()) add("internal/mounts/$stem")
 }

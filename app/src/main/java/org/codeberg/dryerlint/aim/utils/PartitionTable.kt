@@ -15,6 +15,10 @@
 * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+// why dont we just use `partx`?
+// decisive decision to implement custom parsing logic cause it's uhhh yeah (T^T)
+// 1) parsing logic is hard 2) why add a new binary requirement?
+
 package org.codeberg.dryerlint.aim.utils
 
 import android.util.Log
@@ -91,19 +95,86 @@ data class PartitionTableInfo(
     val scheme: PartitionScheme = PartitionScheme.MBR,
 )
 
-// check whether an image is a partitioned disk (MBR), returns null if not partitioned
+// check whether an image is a partitioned disk, returns null if not partitioned
 fun probePartitionTable(imagePath: String, busyboxBin: String): PartitionTableInfo? {
     val imgArg = pathArg(imagePath)
-    fun hexAt(skip: Int, count: Int) = hexProbe(imagePath, skip, count, busyboxBin, imgArg)
-    val sig = hexAt(510, 2)
-    if (sig != "55aa") return null
+    fun hexAt(skip: Int, count: Int, baseOffset: Long = 0L) = hexProbe(imagePath, skip, count, busyboxBin, imgArg, baseOffset)
+
+    // MBR signature required for both MBR and GPT (protective MBR)
+    if (hexAt(510, 2) != "55aa") return null
+
+    // rule out bare FAT/exFAT filesystems that also carry 55AA
     val bps = hexAt(11, 2)
     val nFats = hexAt(16, 1)
     if (bps in VALID_FAT_BPS && nFats in VALID_FAT_NFATS) return null
-    val oem = hexAt(3, 5)
-    if (oem == "4558464154") return null  // exFAT
-    probeGPT(imagePath, busyboxBin, imgArg)?.let { return it }
-    val rawHex = hexAt(446, 64)
+    if (hexAt(3, 5) == "4558464154") return null // exFAT OEM ID
+
+    // check part scheme
+    val isGPT = hexAt(0, 8, GPT_HEADER_OFFSET) == GPT_SIGNATURE_HEX
+    val (entries, scheme) = if (isGPT) {
+        parseGPTEntries(::hexAt) ?: return null
+    } else {
+        parseMBREntries(::hexAt) ?: return null
+    }
+
+    // validate partition boundaries against actual image size
+    val totalSize = queryImageSize(busyboxBin, imgArg)
+    if (totalSize > 0) {
+        entries.removeAll { p ->
+            val end = p.offsetBytes + p.sizeBytes
+            if (p.offsetBytes < 0 || p.sizeBytes < 0 || end < 0 || p.offsetBytes > totalSize) {
+                Log.w(TAG, "P${p.index}: partition boundaries invalid or exceed image size, skipping")
+                true
+            } else false
+        }
+    }
+    if (entries.isEmpty()) return null
+    Log.d(TAG, "${scheme.name} image: ${entries.size} partition(s), total=$totalSize")
+    entries.forEach { p ->
+        Log.d(TAG, "  P${p.index}: type=${p.typeName}, start=${p.startLBA}, size=${p.sizeSectors} sectors (${p.sizeBytes} bytes)")
+    }
+    return PartitionTableInfo(partitions = entries, totalSizeBytes = totalSize, scheme = scheme)
+}
+
+fun probePartitionFilesystems(imagePath: String, partitions: List<PartitionEntry>, busyboxBin: String): List<PartitionEntry> {
+    val imgArg = pathArg(imagePath)
+    return partitions.map { part ->
+        val offset = part.offsetBytes
+        fun probe(skip: Int, count: Int) = hexProbe(imagePath, skip, count, busyboxBin, imgArg, offset)
+        val detected = detectFsByMagic(::probe, part.sizeBytes)
+        val rawLabel = (if (detected != null) probeLabel(::probe, detected, part.sizeBytes) else null) ?: part.label
+        val label = labelToMountStem(rawLabel)
+        if (detected != null) {
+            val refinedTypeName = fsDisplayName(detected)
+            Log.d(TAG, "P${part.index}: ${detected.mountType}" + if (label != null) " label='$label'" else "")
+            part.copy(detectedFs = detected, detectedFsName = detected.mountType, typeName = refinedTypeName, label = label)
+        } else {
+            val fsName = identifyUnsupportedFs(::probe, part.sizeBytes)
+            Log.d(TAG, "P${part.index}: ${fsName ?: "unknown"} fs (type=0x${"%02X".format(part.typeId)})")
+            part.copy(detectedFsName = fsName, typeName = fsName ?: part.typeName)
+        }
+    }
+}
+
+// query image file size via stat or wc -c fallback
+private fun queryImageSize(busyboxBin: String, imgArg: ShellArg): Long {
+    val sizeOut = RootShell.cmd("stat",
+        ShellArg.literal("-c"), ShellArg.literal("%s"), imgArg,
+        busyboxBin = busyboxBin, suppressErr = true,
+        orChain = if (busyboxBin.isNotEmpty()) {
+            TrustedCmdFragment.of("'" + busyboxBin.replace("'", "'\\''") + "' wc -c < ${imgArg.quoted}")
+        } else {
+            TrustedCmdFragment.of("busybox wc -c < ${imgArg.quoted}")
+        }
+    )
+    return sizeOut.output.trim().toLongOrNull() ?: 0L
+}
+
+// parse MBR partition entries from the table at offset 446
+private fun parseMBREntries(
+    hexAt: (skip: Int, count: Int, baseOffset: Long) -> String,
+): Pair<MutableList<PartitionEntry>, PartitionScheme>? {
+    val rawHex = hexAt(446, 64, 0L)
     if (rawHex.length < 128) {
         Log.w(TAG, "short partition table read: ${rawHex.length} hex chars")
         return null
@@ -146,65 +217,13 @@ fun probePartitionTable(imagePath: String, busyboxBin: String): PartitionTableIn
         )
     }
     if (entries.isEmpty()) return null
-    val totalSize = queryImageSize(busyboxBin, imgArg)
-    if (totalSize > 0) {
-        entries.removeAll { p ->
-            val end = p.offsetBytes + p.sizeBytes
-            if (p.offsetBytes < 0 || p.sizeBytes < 0 || end < 0 || p.offsetBytes > totalSize) {
-                Log.w(TAG, "P${p.index}: partition boundaries invalid or exceed image size, skipping")
-                true
-            } else false
-        }
-    }
-    Log.d(TAG, "Partitioned image: ${entries.size} partition(s), total=${totalSize}")
-    entries.forEach { p ->
-        Log.d(TAG, "  P${p.index}: type=${p.typeName}, start=${p.startLBA}, size=${p.sizeSectors} sectors (${p.sizeBytes} bytes)")
-    }
-    return PartitionTableInfo(
-        partitions = entries,
-        totalSizeBytes = totalSize,
-        scheme = PartitionScheme.MBR,
-    )
+    return entries to PartitionScheme.MBR
 }
 
-fun probePartitionFilesystems(imagePath: String, partitions: List<PartitionEntry>, busyboxBin: String): List<PartitionEntry> {
-    val imgArg = pathArg(imagePath)
-    return partitions.map { part ->
-        val offset = part.offsetBytes
-        fun probe(skip: Int, count: Int) = hexProbe(imagePath, skip, count, busyboxBin, imgArg, offset)
-        val detected = detectFsByMagic(::probe, part.sizeBytes)
-        val rawLabel = (if (detected != null) probeLabel(::probe, detected, part.sizeBytes) else null) ?: part.label
-        val label = labelToMountStem(rawLabel)
-        if (detected != null) {
-            val refinedTypeName = fsDisplayName(detected)
-            Log.d(TAG, "P${part.index}: ${detected.mountType}" + if (label != null) " label='$label'" else "")
-            part.copy(detectedFs = detected, detectedFsName = detected.mountType, typeName = refinedTypeName, label = label)
-        } else {
-            val fsName = identifyUnsupportedFs(::probe, part.sizeBytes)
-            Log.d(TAG, "P${part.index}: ${fsName ?: "unknown"} fs (type=0x${"%02X".format(part.typeId)})")
-            part.copy(detectedFsName = fsName, typeName = fsName ?: part.typeName)
-        }
-    }
-}
-
-// query image file size via stat or wc -c fallback
-private fun queryImageSize(busyboxBin: String, imgArg: ShellArg): Long {
-    val sizeOut = RootShell.cmd("stat",
-        ShellArg.literal("-c"), ShellArg.literal("%s"), imgArg,
-        busyboxBin = busyboxBin, suppressErr = true,
-        orChain = if (busyboxBin.isNotEmpty()) {
-            TrustedCmdFragment.of("'" + busyboxBin.replace("'", "'\\''") + "' wc -c < ${imgArg.quoted}")
-        } else {
-            TrustedCmdFragment.of("busybox wc -c < ${imgArg.quoted}")
-        }
-    )
-    return sizeOut.output.trim().toLongOrNull() ?: 0L
-}
-
-// check for a GPT partition table in the image. returns null if not GPT.
-private fun probeGPT(imagePath: String, busyboxBin: String, imgArg: ShellArg): PartitionTableInfo? {
-    fun hexAt(skip: Int, count: Int, baseOffset: Long = 0L) = hexProbe(imagePath, skip, count, busyboxBin, imgArg, baseOffset)
-    if (hexAt(0, 8, GPT_HEADER_OFFSET) != GPT_SIGNATURE_HEX) return null
+// parse GPT partition entries from the header at LBA 1
+private fun parseGPTEntries(
+    hexAt: (skip: Int, count: Int, baseOffset: Long) -> String,
+): Pair<MutableList<PartitionEntry>, PartitionScheme>? {
     val headerFields = hexAt(72, 16, GPT_HEADER_OFFSET)
     if (headerFields.length < 32) {
         Log.w(TAG, "short GPT header read: ${headerFields.length} hex chars")
@@ -244,7 +263,7 @@ private fun probeGPT(imagePath: String, busyboxBin: String, imgArg: ShellArg): P
         val guidName = GPT_TYPE_GUIDS[typeGuid] ?: "Unknown"
         val partName = if (base + entryHexLen <= rawHex.length) parseGPTName(rawHex, base + 112, base + entryHexLen) else null
         val typeName = if (!partName.isNullOrBlank() && partName != guidName)
-        "$guidName ($partName)" else guidName
+            "$guidName ($partName)" else guidName
         entries += PartitionEntry(
             index = entries.size + 1,
             bootable = false,
@@ -257,21 +276,7 @@ private fun probeGPT(imagePath: String, busyboxBin: String, imgArg: ShellArg): P
         )
     }
     if (entries.isEmpty()) return null
-    val totalSize = queryImageSize(busyboxBin, imgArg)
-    if (totalSize > 0) {
-        entries.removeAll { p ->
-            val end = p.offsetBytes + p.sizeBytes
-            if (p.offsetBytes < 0 || p.sizeBytes < 0 || end < 0 || p.offsetBytes > totalSize) {
-                Log.w(TAG, "GPT P${p.index}: partition boundaries exceed image size, skipping")
-                true
-            } else false
-        }
-    }
-    Log.d(TAG, "GPT image: ${entries.size} partition(s), total=$totalSize")
-    entries.forEach { p ->
-        Log.d(TAG, "  P${p.index}: type=${p.typeName}, start=${p.startLBA}, size=${p.sizeSectors} sectors (${p.sizeBytes} bytes)")
-    }
-    return PartitionTableInfo(partitions = entries, totalSizeBytes = totalSize, scheme = PartitionScheme.GPT)
+    return entries to PartitionScheme.GPT
 }
 
 // decode a UTF-16LE partition name from GPT entry hex data
