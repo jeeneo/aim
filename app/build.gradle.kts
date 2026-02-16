@@ -25,8 +25,8 @@ android {
         applicationId = "org.codeberg.dryerlint.aim"
         minSdk = 34 // not tested, probably wont work on anything old?
         targetSdk = 36
-        versionCode = 100
-        versionName = "1.0.0"
+        versionCode = 101
+        versionName = "1.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
