@@ -31,7 +31,7 @@
 
     <!-- Dialog strings -->
     <string name="dialog_format_title">Format image?</string>
-    <string name="dialog_format_message">This will erase ALL data on \"%s\" and create an empty ext4 filesystem. This cannot be undone.</string>
+    <string name="dialog_format_message">This will erase ALL data and partitions on \"%s\" and create an empty ext4 filesystem. This cannot be undone.</string>
     <string name="dialog_format_confirm">Format</string>
     <string name="dialog_remove_image">Remove image</string>
     <string name="dialog_close">Close</string>
