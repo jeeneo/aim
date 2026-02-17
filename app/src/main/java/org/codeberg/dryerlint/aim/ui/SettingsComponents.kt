@@ -18,6 +18,7 @@
 @file:Suppress("AssignedValueIsNeverRead")
 package org.codeberg.dryerlint.aim.ui
 
+import android.content.res.ColorStateList
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,7 +34,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Switch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -48,10 +48,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import com.google.android.material.materialswitch.MaterialSwitch
 import org.codeberg.dryerlint.aim.R
 
 @Composable
@@ -160,11 +163,44 @@ fun SwitchPreferenceItem(
                 .width(1.dp),
             color = MaterialTheme.colorScheme.outlineVariant,
         )
-        Switch(
-            checked = checked,
-            onCheckedChange = if (enabled) onCheckedChange else null,
-            enabled = enabled,
-            modifier = Modifier.height(12.dp).padding(horizontal = 16.dp),
+        val primaryColor = MaterialTheme.colorScheme.primary.toArgb()
+        val onPrimaryColor = MaterialTheme.colorScheme.onPrimary.toArgb()
+        val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant.toArgb()
+        val outlineColor = MaterialTheme.colorScheme.outline.toArgb()
+        AndroidView(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            factory = { context ->
+                MaterialSwitch(context).apply {
+                    trackTintList = ColorStateList(
+                        arrayOf(
+                            intArrayOf(android.R.attr.state_checked),
+                            intArrayOf(-android.R.attr.state_checked)
+                        ),
+                        intArrayOf(primaryColor, surfaceVariantColor)
+                    )
+                    thumbTintList = ColorStateList(
+                        arrayOf(
+                            intArrayOf(android.R.attr.state_checked),
+                            intArrayOf(-android.R.attr.state_checked)
+                        ),
+                        intArrayOf(onPrimaryColor, outlineColor)
+                    )
+                    trackDecorationTintList = ColorStateList(
+                        arrayOf(
+                            intArrayOf(android.R.attr.state_checked),
+                            intArrayOf(-android.R.attr.state_checked)
+                        ),
+                        intArrayOf(primaryColor, outlineColor)
+                    )
+                }
+            },
+            update = { switchView ->
+                switchView.isChecked = checked
+                switchView.isEnabled = enabled
+                switchView.setOnCheckedChangeListener { _, isChecked ->
+                    if (enabled) onCheckedChange(isChecked)
+                }
+            },
         )
     }
 }
@@ -180,21 +216,51 @@ fun ImageOptionsDialog(
     storageExposed: Boolean = false,
     onStorageChange: (Boolean) -> Unit = {},
     onRemove: () -> Unit,
-    onFormat: () -> Unit = {},
+    onFormat: (String) -> Unit = {},
     showFormat: Boolean = true,
     onChangePartition: () -> Unit = {},
     showChangePartition: Boolean = false,
 ) {
     var confirmFormat by remember { mutableStateOf(false) }
+    var selectedFsType by remember { mutableStateOf("ext4") }
     if (confirmFormat) {
         AlertDialog(
             onDismissRequest = { confirmFormat = false },
             title = { Text(text = stringResource(R.string.dialog_format_title)) },
-            text = { Text(text = stringResource(R.string.dialog_format_message, title)) },
+            text = {
+                Column {
+                    Text(text = stringResource(R.string.dialog_format_message, title))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = stringResource(R.string.dialog_format_fs_label),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    listOf("ext4", "exfat").forEach { fsType ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { selectedFsType = fsType }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            androidx.compose.material3.RadioButton(
+                                selected = selectedFsType == fsType,
+                                onClick = { selectedFsType = fsType },
+                            )
+                            Text(
+                                text = fsType,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     confirmFormat = false
-                    onFormat()
+                    onFormat(selectedFsType)
                 }) {
                     Text(text = stringResource(R.string.dialog_format_confirm), color = MaterialTheme.colorScheme.error)
                 }
@@ -265,7 +331,7 @@ fun ImageOptionsDialog(
                 // Spacer(modifier = Modifier.height(4.dp))
                 if (showFormat) {
                     Text(
-                        text = stringResource(R.string.pref_format_ext4_name),
+                        text = stringResource(R.string.pref_format_image_name),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier
                             .fillMaxWidth()

@@ -471,7 +471,7 @@ class AimViewModel(application: Application) : AndroidViewModel(application) {
         ))
     }
 
-    fun formatImage(path: String) {
+    fun formatImage(path: String, fsType: String = "ext4") {
         viewModelScope.launch {
             withLockedUi {
                 val ui = _images.value.find { it.path == path }
@@ -487,7 +487,7 @@ class AimViewModel(application: Application) : AndroidViewModel(application) {
                     alert(Alert.Failure("Path failed validation"))
                     return@withLockedUi
                 }
-                val result = withContext(Dispatchers.IO) { mountManager.formatImage(path) }
+                val result = withContext(Dispatchers.IO) { mountManager.formatImage(path, fsType) }
                 result.onSuccess { msg ->
                     alert(Alert.Success(msg))
                     // clear partition flags since formatting removes the partition table

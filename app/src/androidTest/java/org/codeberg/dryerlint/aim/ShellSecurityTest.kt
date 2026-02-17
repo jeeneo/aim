@@ -260,141 +260,6 @@ class ShellSecurityTest {
     }
 
     @Test
-    fun testValidatePath_acceptsValidPaths() {
-        val validPaths = listOf(
-            "/data/local/tmp/test.img",
-            "/storage/emulated/0/test.img",
-            "/sdcard/Download/image.img",
-            "relative/path/test.img",
-        )
-        for (path in validPaths) {
-            assertTrue("Should accept: $path", validatePath(path))
-        }
-    }
-
-    @Test
-    fun testValidatePath_rejectsPathTraversal() {
-        val invalidPaths = listOf(
-            "/data/../etc/passwd",
-            "../../../etc/passwd",
-            "/data/local/../../../etc/passwd",
-        )
-        for (path in invalidPaths) {
-            assertFalse("Should reject: $path", validatePath(path))
-        }
-    }
-
-    @Test
-    fun testValidatePath_rejectsShellMetacharacters() {
-        val invalidPaths = listOf(
-            "/tmp/file;rm",
-            "/tmp/file|pipe",
-            "/tmp/file&bg",
-            "/tmp/file\$(cmd)",
-            "/tmp/file`cmd`",
-            "/tmp/file\u0000null",
-            "/tmp/file\nline",
-            "/tmp/file<redirect",
-            "/tmp/file>redirect",
-        )
-        for (path in invalidPaths) {
-            assertFalse("Should reject: $path", validatePath(path))
-        }
-    }
-
-    @Test
-    fun testValidateBindDir_acceptsAllowedDirectories() {
-        val allowed = listOf(
-            "/data/media/0/test",
-            "/storage/emulated/0/DCIM",
-            "/sdcard/Download",
-            "/mnt/media_rw/sdcard1/folder",
-        )
-        for (dir in allowed) {
-            val result = validateBindDir(dir)
-            assertNull("Should accept: $dir (got: $result)", result)
-        }
-    }
-
-    @Test
-    fun testValidateBindDir_rejectsSystemDirectories() {
-        val blocked = listOf(
-            "/system",
-            "/system/bin",
-            "/vendor/lib",
-            "/data/data",
-            "/data/app",
-            "/proc/self",
-            "/dev/block",
-        )
-        for (dir in blocked) {
-            val result = validateBindDir(dir)
-            assertNotNull("Should reject: $dir", result)
-            assertTrue("Error should mention allowed zones", result!!.contains("must be under"))
-        }
-    }
-
-    @Test
-    fun testValidateBindDir_rejectsRelativePaths() {
-        val result = validateBindDir("relative/path")
-        assertNotNull(result)
-        assertTrue(result!!.contains("absolute"))
-    }
-
-    @Test
-    fun testValidateBindDir_rejectsEmpty() {
-        val result = validateBindDir("")
-        assertNotNull(result)
-        assertTrue(result!!.contains("empty"))
-    }
-
-    @Test
-    fun testValidateBindDir_rejectsPathTraversal() {
-        val result = validateBindDir("/data/media/../system")
-        assertNotNull(result)
-    }
-
-    @Test
-    fun testValidateBindDir_rejectsDisallowedLocations() {
-        val result = validateBindDir("/tmp/test")
-        assertNotNull(result)
-        assertTrue(result!!.contains("must be under"))
-    }
-
-    @Test
-    fun testSanitizeStem_removesLeadingDots() {
-        assertEquals("test", sanitizeStem(".test"))
-        assertEquals("test", sanitizeStem("..test"))
-        assertEquals("test", sanitizeStem("...test"))
-    }
-
-    @Test
-    fun testSanitizeStem_handlesDotDot() {
-        assertEquals("mounted_img", sanitizeStem(".."))
-    }
-
-    @Test
-    fun testSanitizeStem_handlesSingleDot() {
-        assertEquals("mounted_img", sanitizeStem("."))
-    }
-
-    @Test
-    fun testSanitizeStem_handlesEmpty() {
-        assertEquals("mounted_img", sanitizeStem(""))
-    }
-
-    @Test
-    fun testSanitizeStem_handlesBlank() {
-        assertEquals("mounted_img", sanitizeStem("   "))
-    }
-
-    @Test
-    fun testSanitizeStem_preservesValidStem() {
-        assertEquals("myimage", sanitizeStem("myimage"))
-        assertEquals("test_123", sanitizeStem("test_123"))
-    }
-
-    @Test
     fun testRootShell_rejectsNonWhitelistedBinary() {
         val result = RootShell.cmd("malicious_binary", ShellArg.of("arg"))
         assertFalse("Should reject non-whitelisted binary", result.isSuccess)
@@ -412,5 +277,169 @@ class ShellSecurityTest {
         val result = RootShell.cmd("nonexistent_command", ShellArg.of("arg"))
         assertEquals(-1, result.exitCode)
         assertTrue(result.output.contains("not allowed"))
+    }
+
+    @Test
+    fun testRootShell_cmdOverload_acceptsPreBuiltShellCmd() {
+        val command = ShellCmd.of("echo", ShellArg.of("hello"))
+        val result = RootShell.cmd(command)
+        assertFalse(result.output.contains("not allowed"))
+    }
+
+    @Test
+    fun testRootShell_cmdOverload_withPipeInto() {
+        val command = ShellCmd.of("echo", ShellArg.of("pipe test"))
+        val pipe = ShellCmd.of("head", ShellArg.literal("-1"))
+        val result = RootShell.cmd(command, pipeInto = pipe)
+        assertFalse(result.output.contains("not allowed"))
+    }
+
+    @Test
+    fun testRootShell_cmdOverload_withChain() {
+        val command = ShellCmd.of("echo", ShellArg.of("first"))
+        val chained = ShellCmd.of("echo", ShellArg.of("second"))
+        val result = RootShell.cmd(command, chain = chained)
+        assertFalse(result.output.contains("not allowed"))
+    }
+
+    @Test
+    fun testRootShell_cmdOverload_withOrChain() {
+        val command = ShellCmd.of("echo", ShellArg.of("primary"))
+        val fallback = ShellCmd.of("echo", ShellArg.of("fallback"))
+        val result = RootShell.cmd(command, orChain = fallback)
+        assertFalse(result.output.contains("not allowed"))
+    }
+
+    @Test
+    fun testShellCmd_of_rejectsNonWhitelistedBinary() {
+        assertThrows(IllegalArgumentException::class.java) {
+            ShellCmd.of("malicious_binary", ShellArg.of("arg"))
+        }
+    }
+
+    @Test
+    fun testShellCmd_of_rejectsArbitraryAbsolutePath() {
+        assertThrows(IllegalArgumentException::class.java) {
+            ShellCmd.of("/data/local/tmp/evil", ShellArg.of("arg"))
+        }
+    }
+
+    @Test
+    fun testShellCmd_of_acceptsAllowedBinary() {
+        val cmd = ShellCmd.of("echo", ShellArg.of("test"))
+        assertTrue("Fragment should contain echo", cmd.fragment.contains("echo"))
+    }
+
+    @Test
+    fun testShellCmd_of_acceptsAllowedAbsolutePath() {
+        val cmd = ShellCmd.of("/system/bin/mke2fs", ShellArg.literal("-V"))
+        assertTrue(cmd.fragment.contains("mke2fs"))
+    }
+
+    @Test
+    fun testShellCmd_of_quotesAbsolutePath() {
+        val cmd = ShellCmd.of("/system/bin/mke2fs", ShellArg.literal("-V"))
+        assertTrue("Absolute path should be single-quoted", cmd.fragment.startsWith("'"))
+    }
+
+    @Test
+    fun testShellCmd_of_busyboxPrefix() {
+        val cmd = ShellCmd.of("grep", ShellArg.literal("-F"), busyboxBin = "/data/adb/magisk/busybox")
+        assertTrue("Should contain busybox path", cmd.fragment.contains("busybox"))
+        assertTrue("Should contain grep", cmd.fragment.contains("grep"))
+    }
+
+    @Test
+    fun testShellCmd_of_busyboxPrefixQuotesPath() {
+        val cmd = ShellCmd.of("grep", busyboxBin = "/data/adb/magisk/busybox")
+        assertTrue("Busybox path should be single-quoted", cmd.fragment.startsWith("'"))
+    }
+
+    @Test
+    fun testShellCmd_of_stdinRedirection() {
+        val imgArg = ShellArg.of("/sdcard/test.img")
+        val cmd = ShellCmd.of("wc", ShellArg.literal("-c"), stdinFrom = imgArg)
+        assertTrue("Should contain < for stdin", cmd.fragment.contains(" < "))
+        assertTrue("Should contain the file path", cmd.fragment.contains("test.img"))
+    }
+
+    @Test
+    fun testShellCmd_chain_joinsWithDoubleAmpersand() {
+        val a = ShellCmd.of("chown", ShellArg.literal("1000:1000"), ShellArg.of("/tmp"))
+        val b = ShellCmd.of("chmod", ShellArg.literal("755"), ShellArg.of("/tmp"))
+        val chained = ShellCmd.chain(a, b)
+        assertTrue("Chain should join with &&", chained.fragment.contains(" && "))
+    }
+
+    @Test
+    fun testShellCmd_chain_preservesOrder() {
+        val a = ShellCmd.of("echo", ShellArg.of("first"))
+        val b = ShellCmd.of("echo", ShellArg.of("second"))
+        val chained = ShellCmd.chain(a, b)
+        val idxFirst = chained.fragment.indexOf("first")
+        val idxSecond = chained.fragment.indexOf("second")
+        assertTrue("First command should precede second", idxFirst < idxSecond)
+    }
+
+    @Test
+    fun testShellCmd_chain_multipleCommands() {
+        val a = ShellCmd.of("echo", ShellArg.of("a"))
+        val b = ShellCmd.of("echo", ShellArg.of("b"))
+        val c = ShellCmd.of("echo", ShellArg.of("c"))
+        val chained = ShellCmd.chain(a, b, c)
+        val parts = chained.fragment.split(" && ")
+        assertEquals("Three commands produce three parts", 3, parts.size)
+    }
+
+    @Test
+    fun testShellCmd_cannotBypassAllowlistViaBusybox() {
+        assertThrows(IllegalArgumentException::class.java) {
+            ShellCmd.of("rm", ShellArg.literal("-rf"), ShellArg.of("/"), busyboxBin = "/data/adb/magisk/busybox")
+        }
+    }
+
+    @Test
+    fun testShellCmd_rejectsEmptyBinary() {
+        assertThrows(IllegalArgumentException::class.java) {
+            ShellCmd.of("")
+        }
+    }
+
+    @Test
+    fun testShellCmd_quotesBusyboxPathWithSingleQuotes() {
+        val cmd = ShellCmd.of("echo", busyboxBin = "/data/adb/magi'sk/busybox")
+        assertTrue("Busybox single quote should be escaped", cmd.fragment.contains("'\\''"))
+    }
+
+    @Test
+    fun testShellCmd_quotesAbsolutePathWithSingleQuotes() {
+        val cmd = ShellCmd.of("/system/bin/mke2fs")
+        assertTrue(cmd.fragment.startsWith("'/system/bin/mke2fs'"))
+    }
+
+    @Test
+    fun testShellCmd_argsAreIncludedInFragment() {
+        val cmd = ShellCmd.of("grep", ShellArg.literal("-F"), ShellArg.of("search term"))
+        assertTrue(cmd.fragment.contains("-F"))
+        assertTrue(cmd.fragment.contains("search term"))
+    }
+
+    @Test
+    fun testBothCmdOverloads_sameAllowlistReject() {
+        val r1 = RootShell.cmd("rm", ShellArg.literal("-rf"))
+        assertFalse(r1.isSuccess)
+        assertTrue(r1.output.contains("not allowed"))
+        assertThrows(IllegalArgumentException::class.java) {
+            ShellCmd.of("rm", ShellArg.literal("-rf"))
+        }
+    }
+
+    @Test
+    fun testBothCmdOverloads_sameAllowlistAccept() {
+        val r1 = RootShell.cmd("echo", ShellArg.of("test"))
+        assertFalse(r1.output.contains("not allowed"))
+        val cmd = ShellCmd.of("echo", ShellArg.of("test"))
+        val r2 = RootShell.cmd(cmd)
+        assertFalse(r2.output.contains("not allowed"))
     }
 }

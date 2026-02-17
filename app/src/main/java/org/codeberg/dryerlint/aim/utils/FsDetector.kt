@@ -47,7 +47,6 @@ fun hexProbe(
     baseOffset: Long = 0,
 ): String {
     val totalSkip = baseOffset + skip
-    // note: dd piped into hexdump
     val ddResult = RootShell.cmd("dd",
         ShellArg.literal("if=${imgArg.quoted}"),
         ShellArg.literal("bs=1"),
@@ -55,18 +54,13 @@ fun hexProbe(
         ShellArg.literal("count=$count"),
         busyboxBin = busyboxBin,
         suppressErr = true,
-        pipeInto = if (busyboxBin.isNotEmpty()) {
-            TrustedCmdFragment.of("'" + busyboxBin.replace("'", "'\\''") + "' hexdump -v -e '/1 \"%02x\"'")
-        } else {
-            TrustedCmdFragment.of("busybox hexdump -v -e '/1 \"%02x\"'")
-        }
+        pipeInto = ShellCmd.of("hexdump", ShellArg.literal("-v"), ShellArg.literal("-e"), ShellArg.of("/1 \"%02x\""), busyboxBin = busyboxBin)
     )
     return ddResult.output.trim().lowercase()
 }
 
 fun detectFsByMagic(probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALUE): FsType? {
     if (probe(1080, 2) == EXT4_MAGIC_HEX) return FsType.EXT4
-
     if (probe(510, 2) == FAT_SIG_HEX) {
         if (probe(3, 5) == EXFAT_OEM_HEX) return FsType.EXFAT
         val bps = probe(11, 2)
@@ -79,9 +73,8 @@ fun detectFsByMagic(probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALU
 }
 
 // identify known-but-unsupported filesystems by magic bytes
-fun identifyUnsupportedFs(probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALUE): String? {
-    if (probe(3, 4) == NTFS_OEM_HEX) return "NTFS"
-    return null
+fun identifyUnsupportedFs(probe: (Int, Int) -> String): String? {
+    return if (probe(3, 4) == NTFS_OEM_HEX) "NTFS" else null
 }
 
 class PartitionedImageException(val tableInfo: PartitionTableInfo) : Exception("Image contains a partition table")

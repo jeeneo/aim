@@ -20,12 +20,11 @@ package org.codeberg.dryerlint.aim
 
 import android.net.Uri
 import android.os.Bundle
+import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,9 +38,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -54,16 +50,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.coordinatorlayout.widget.CoordinatorLayout
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.suspendCancellableCoroutine
+import org.codeberg.dryerlint.aim.ui.BindDirDialog
 import org.codeberg.dryerlint.aim.ui.ImageOptionsDialog
 import org.codeberg.dryerlint.aim.ui.PartitionPickerDialog
 import org.codeberg.dryerlint.aim.ui.PreferenceCategory
 import org.codeberg.dryerlint.aim.ui.PreferenceItem
 import org.codeberg.dryerlint.aim.ui.SwitchPreferenceItem
-import org.codeberg.dryerlint.aim.ui.BindDirDialog
 import org.codeberg.dryerlint.aim.ui.theme.AimTheme
+import kotlin.coroutines.resume
 
 // here we kinda copy the UI of MSD (https://github.com/chenxiaolong/MSD)
 // in a kotliny way cause its simple enough and i find the UI to be pretty good
@@ -75,7 +78,18 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         installSplashScreen()
         enableEdgeToEdge()
-        setContent { AimTheme { AimApp() } }
+        val coordinator = CoordinatorLayout(this)
+        val composeView = ComposeView(this).apply {
+            setContent { AimTheme { AimApp() } }
+        }
+        coordinator.addView(
+            composeView,
+            CoordinatorLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+        )
+        setContentView(coordinator)
     }
 }
 
@@ -86,7 +100,7 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
         val version = BuildConfig.VERSION_NAME.removeSuffix(".debug")
         "$version (${BuildConfig.BUILD_TYPE})"
     }
-    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarAnchor = LocalView.current
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val canAct by viewModel.canAct.collectAsState()
     val envStatus by viewModel.envStatus.collectAsState()
@@ -104,11 +118,17 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
 
     LaunchedEffect(alerts) {
         val alert = alerts.firstOrNull() ?: return@LaunchedEffect
-        val message = alert.message
-        val result = snackbarHostState.showSnackbar(message)
-        if (result == SnackbarResult.Dismissed || result == SnackbarResult.ActionPerformed) {
-            viewModel.acknowledgeFirstAlert()
+        suspendCancellableCoroutine { cont ->
+            val snackbar = Snackbar.make(snackbarAnchor, alert.message, Snackbar.LENGTH_LONG)
+            snackbar.addCallback(object : Snackbar.Callback() {
+                override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                    if (cont.isActive) cont.resume(Unit)
+                }
+            })
+            cont.invokeOnCancellation { snackbar.dismiss() }
+            snackbar.show()
         }
+        viewModel.acknowledgeFirstAlert()
     }
 
     val showEnv = envChecked && !envStatus.ready
@@ -150,8 +170,8 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
                 dialogImagePath = null
                 viewModel.removeImage(dialogImage.path)
             },
-            onFormat = {
-                viewModel.formatImage(dialogImage.path)
+            onFormat = { fsType ->
+                viewModel.formatImage(dialogImage.path, fsType)
             },
             showFormat = !dialogImage.isReadOnly,
             onChangePartition = {
@@ -164,7 +184,7 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
     Scaffold(
         modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = { TopAppBar( title = { Text(stringResource(R.string.app_name)) }, scrollBehavior = scrollBehavior) },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(modifier = Modifier.fillMaxSize()) {

@@ -51,7 +51,7 @@ fun probeLabel(probe: (skip: Int, count: Int) -> String, fsType: FsType, sizeByt
             FsType.EXT4 -> probeExt4Label(probe)
             FsType.VFAT -> probeVfatLabel(probe)
             FsType.EXFAT -> probeExfatLabel(probe, sizeBytes)
-            FsType.ISO9660 -> probeISO9660Label(probe, sizeBytes)
+            else -> null
         }
         labelToMountStem(raw)
     } catch (e: Exception) {
@@ -123,13 +123,6 @@ private fun probeExfatLabel(probe: (Int, Int) -> String, sizeBytes: Long): Strin
         return decodeHexAsUTF16LE(labelHex)
     }
     return null
-}
-
-private fun probeISO9660Label(probe: (Int, Int) -> String, sizeBytes: Long): String? {
-    if (sizeBytes < 33000) return null
-    val hex = probe(32808, 32) // 32768 + 40
-    if (hex.length < 2) return null
-    return decodeHexAsASCII(hex, nullTerminated = false)?.trimEnd()
 }
 
 private fun decodeHexAsASCII(hex: String, nullTerminated: Boolean): String? {

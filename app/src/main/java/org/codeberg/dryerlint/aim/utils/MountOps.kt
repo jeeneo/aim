@@ -122,23 +122,26 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String) {
     val mpArg = pathArg(mountPoint)
     val mountsDirArg = pathArg(mountsDir)
     val parentCtx = RootShell.cmd("ls", ShellArg.literal("-dZ"), mountsDirArg,
-        pipeInto = if (busyboxBin.isNotEmpty()) {
-            TrustedCmdFragment.of("'" + busyboxBin.replace("'", "'\\''") + $$"' awk '{print $1}'")
-        } else {
-            TrustedCmdFragment.of($$"busybox awk '{print $1}'")
-        }
+        pipeInto = ShellCmd.of("awk", ShellArg.of("{print \$1}"), busyboxBin = busyboxBin)
     ).output.trim().takeIf { it.matches(Regex("^[a-zA-Z0-9_:,.]+$")) && ':' in it } ?: "u:object_r:app_data_file:s0"
     val ctxArg = secontextArg(parentCtx)
-    RootShell.cmd("chmod", ShellArg.literal("-R"), enumArg("777", ALLOWED_CHMOD_MODES), mpArg, chain = TrustedCmdFragment.of("chcon -Rh ${ctxArg.quoted} ${mpArg.quoted}"))
+    RootShell.cmd("chmod", ShellArg.literal("-R"), enumArg("777", ALLOWED_CHMOD_MODES), mpArg,
+        chain = ShellCmd.of("chcon", ShellArg.literal("-Rh"), ctxArg, mpArg))
 }
 
 // restore ownership (1000:1000) and permissions before unmount
 fun restorePermissions(mountPoint: String, busyboxBin: String) {
     Log.d(TAG, "restorePerms: $mountPoint")
     val mpArg = pathArg(mountPoint)
-    // chown + find dirs + find files - chained as single command
-    val findBin = if (busyboxBin.isNotEmpty()) "'" + busyboxBin.replace("'", "'\\''") + "' find" else "busybox find"
-    RootShell.cmd("chown", ShellArg.literal("-R"), ShellArg.literal("1000:1000"), mpArg, chain = TrustedCmdFragment.of("$findBin ${mpArg.quoted} -type d -exec chmod 775 {} + && $findBin ${mpArg.quoted} -type f -exec chmod 664 {} +"))
+    RootShell.cmd("chown", ShellArg.literal("-R"), ShellArg.literal("1000:1000"), mpArg,
+        chain = ShellCmd.chain(
+            ShellCmd.of("find", mpArg, ShellArg.literal("-type"), ShellArg.literal("d"),
+                ShellArg.literal("-exec"), ShellArg.literal("chmod"), enumArg("775", VALID_CHMOD_MODES), ShellArg.literal("{}"), ShellArg.literal("+"),
+                busyboxBin = busyboxBin),
+            ShellCmd.of("find", mpArg, ShellArg.literal("-type"), ShellArg.literal("f"),
+                ShellArg.literal("-exec"), ShellArg.literal("chmod"), enumArg("664", VALID_CHMOD_MODES), ShellArg.literal("{}"), ShellArg.literal("+"),
+                busyboxBin = busyboxBin)
+        ))
 }
 
 fun cleanupAndFail(mp: String, loop: String?, msg: String, busyboxBin: String): OpResult {

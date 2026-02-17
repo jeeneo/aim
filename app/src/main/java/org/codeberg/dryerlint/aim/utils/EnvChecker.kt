@@ -40,11 +40,11 @@ fun checkEnv(currentBusybox: String): Pair<EnvironmentStatus, String> {
 
 private fun locateSystemBusybox(): String? = BUSYBOX_CANDIDATES.firstOrNull { c ->
     val candidateArg = if (c.startsWith("/")) pathArg(c) else ShellArg.of(c)
-    RootShell.exec("${candidateArg.quoted} --list >/dev/null 2>&1 && echo OK").let { it.exitCode == 0 && "OK" in it.output }
+    RootShell.testBusybox(candidateArg)
 }?.let { c ->
     if (c.startsWith("/")) c
     else {
         val candidateArg = ShellArg.of(c)
-        RootShell.cmd("command", ShellArg.literal("-v"), candidateArg, suppressErr = true, orChain = TrustedCmdFragment.of("echo ${candidateArg.quoted}")).output.lineSequence().firstOrNull()?.trim()?.takeIf { it.isNotBlank() } ?: c
+        RootShell.cmd("command", ShellArg.literal("-v"), candidateArg, suppressErr = true, orChain = ShellCmd.of("echo", candidateArg)).output.lineSequence().firstOrNull()?.trim()?.takeIf { it.isNotBlank() } ?: c
     }
 }

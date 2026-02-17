@@ -9,14 +9,13 @@
 
     <!-- Environment preferences -->
     <string name="pref_root_status_name">Root access</string>
-    <string name="pref_busybox_status_name">Busybox</string>
     <string name="pref_root_busybox_status_name">Root and Busybox</string>
     <string name="pref_retry_checks_name">Retry environment checks</string>
-    <string name="pref_retry_checks_desc">Check for root and busybox again</string>
+    <string name="pref_retry_checks_desc">Check again</string>
 
     <!-- Images category -->
     <string name="pref_add_image_name">Add image</string>
-    <string name="pref_add_image_desc">Add a new .img or .iso file</string>
+    <string name="pref_add_image_desc">Add a new .img file</string>
     <string name="pref_expose_saf_name">Documents provider</string>
     <string name="pref_expose_storage_name">Internal storage</string>
     <string name="dialog_expose_heading">Expose</string>
@@ -26,12 +25,13 @@
     <string name="pref_header_settings">Settings</string>
     <string name="pref_apply_settings_name">Apply settings</string>
     <string name="pref_apply_settings_desc">Mount/unmount images according to current toggles</string>
-    <string name="pref_format_ext4_name">Format to EXT4</string>
+    <string name="pref_format_image_name">Format image</string>
     <string name="pref_change_partition_name">Change partition</string>
 
     <!-- Dialog strings -->
     <string name="dialog_format_title">Format image?</string>
-    <string name="dialog_format_message">This will erase ALL data and partitions on \"%s\" and create an empty ext4 filesystem. This cannot be undone.</string>
+    <string name="dialog_format_message">This will erase ALL data and partitions on \"%s\" and create an empty filesystem. This cannot be undone.</string>
+    <string name="dialog_format_fs_label">Filesystem type:</string>
     <string name="dialog_format_confirm">Format</string>
     <string name="dialog_remove_image">Remove image</string>
     <string name="dialog_close">Close</string>

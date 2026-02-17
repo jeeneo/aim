@@ -25,9 +25,6 @@ import java.nio.file.Files
 
 private const val TAG = "FormatOps"
 private data class MkfsLocation(val path: String, val isBusyboxApplet: Boolean)
-private val ALLOWED_MKFS_PATHS = setOf(
-    "/system/bin/mke2fs", "/system/bin/mkfs.ext4", "mke2fs", "mkfs.ext4",
-)
 
 @SuppressLint("SdCardPath")
 private val FORMAT_ALLOWED_PREFIXES = listOf(
@@ -37,8 +34,8 @@ private val FORMAT_ALLOWED_PREFIXES = listOf(
     "/mnt/media_rw/",
 )
 
-// format an image to ext4, image must NOT be mounted
-fun formatImage(path: String, ready: Boolean, busyboxBin: String): OpResult {
+// format an image, must NOT be mounted
+fun formatImage(path: String, ready: Boolean, busyboxBin: String, fsType: String = "ext4"): OpResult {
     if (!ready) return OpResult.failure(Exception("Environment not ready"))
     val imagePath = path.trim()
     if (imagePath.isBlank()) return OpResult.failure(Exception("Empty path"))
@@ -59,29 +56,56 @@ fun formatImage(path: String, ready: Boolean, busyboxBin: String): OpResult {
     if (Files.isSymbolicLink(java.nio.file.Paths.get(imagePath))) return OpResult.failure(Exception("Symbolic links are not allowed for format operations"))
     val imgArg = pathArg(canonical)
     // check not currently loop-attached
-    val losetupCheck = RootShell.cmd("losetup", ShellArg.literal("-a"),
-        busyboxBin = busyboxBin, suppressErr = true,
-        pipeInto = TrustedCmdFragment.of("grep -F ${imgArg.quoted}"))
+    val losetupCheck = RootShell.cmd("losetup", ShellArg.literal("-a"), busyboxBin = busyboxBin, suppressErr = true, pipeInto = ShellCmd.of("grep", ShellArg.literal("-F"), imgArg))
     if (losetupCheck.exitCode == 0 && losetupCheck.output.isNotBlank()) return OpResult.failure(Exception("Image is currently mounted - unmount first"))
-    val mkfs = mke2fsBinary(busyboxBin) ?: return OpResult.failure(Exception("No mke2fs or mkfs.ext4 found on device"))
-    Log.d(TAG, "Formatting $canonical with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})")
-    val r = if (mkfs.isBusyboxApplet) {RootShell.cmd("mkfs.ext4", ShellArg.literal("-t"), ShellArg.literal("ext4"), ShellArg.literal("-F"), imgArg, busyboxBin = busyboxBin, redirectErr = true)
+    val r = when (fsType.lowercase()) {"ext4" -> formatExt4(canonical, imgArg, busyboxBin) "exfat" -> formatExfat(canonical, imgArg, busyboxBin) else -> return OpResult.failure(Exception("Unsupported filesystem type: $fsType")) }
+    return if (r.exitCode == 0) OpResult.success("Formatted successfully as $fsType")
+    else OpResult.failure(Exception("Format failed: ${r.output}"))
+}
+
+private fun formatExt4(canonical: String, imgArg: ShellArg, busyboxBin: String): ShellResult {
+    val mkfs = mke2fsBinary(busyboxBin) ?: return ShellResult(-1, "No mke2fs or mkfs.ext4 found on device")
+    Log.d(TAG, "Formatting $canonical as ext4 with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})")
+    return if (mkfs.isBusyboxApplet) {
+        RootShell.cmd("mkfs.ext4", ShellArg.literal("-t"), ShellArg.literal("ext4"), ShellArg.literal("-F"), imgArg, busyboxBin = busyboxBin, redirectErr = true)
     } else {
         RootShell.cmd(mkfs.path, ShellArg.literal("-t"), ShellArg.literal("ext4"), ShellArg.literal("-F"), imgArg, redirectErr = true)
     }
-    return if (r.exitCode == 0) OpResult.success("Formatted successfully")
-    else OpResult.failure(Exception("Format failed: ${r.output}"))
+}
+
+private fun formatExfat(canonical: String, imgArg: ShellArg, busyboxBin: String): ShellResult {
+    val mkfs = mkExfatBinary(busyboxBin) ?: return ShellResult(-1, "No mkfs.exfat or mkexfatfs found on device")
+    Log.d(TAG, "Formatting $canonical as exfat with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})")
+    return if (mkfs.isBusyboxApplet) {
+        RootShell.cmd("mkfs.exfat", imgArg, busyboxBin = busyboxBin, redirectErr = true)
+    } else {
+        RootShell.cmd(mkfs.path, imgArg, redirectErr = true)
+    }
 }
 
 // locate mke2fs / mkfs.ext4 on the device
 private fun mke2fsBinary(busyboxBin: String): MkfsLocation? {
-    for (c in ALLOWED_MKFS_PATHS) {
-        val r = RootShell.cmd(c, ShellArg.literal("-V"), redirectErr = true, pipeInto = TrustedCmdFragment.of("head -1"))
+    val candidates = listOf("mke2fs", "mkfs.ext4").flatMap { listOf("/system/bin/" + it, it) }
+    for (c in candidates) {
+        val r = RootShell.cmd(c, ShellArg.literal("-V"), redirectErr = true, pipeInto = ShellCmd.of("head", ShellArg.literal("-1")))
         if (r.exitCode == 0) return MkfsLocation(c, isBusyboxApplet = false)
     }
     if (busyboxBin.isNotEmpty()) {
-        val r = RootShell.cmd("mkfs.ext4", ShellArg.literal("-V"),
-            busyboxBin = busyboxBin, redirectErr = true, pipeInto = TrustedCmdFragment.of("head -1"))
+        val r = RootShell.cmd("mkfs.ext4", ShellArg.literal("-V"), busyboxBin = busyboxBin, redirectErr = true, pipeInto = ShellCmd.of("head", ShellArg.literal("-1")))
+        if (r.exitCode == 0) return MkfsLocation(busyboxBin, isBusyboxApplet = true)
+    }
+    return null
+}
+
+// locate mkfs.exfat / mkexfatfs on the device
+private fun mkExfatBinary(busyboxBin: String): MkfsLocation? {
+    val candidates = listOf("mkfs.exfat", "mkexfatfs").flatMap { listOf("/system/bin/" + it, it) }
+    for (c in candidates) {
+        val r = RootShell.cmd(c, ShellArg.literal("-V"), redirectErr = true, pipeInto = ShellCmd.of("head", ShellArg.literal("-1")))
+        if (r.exitCode == 0) return MkfsLocation(c, isBusyboxApplet = false)
+    }
+    if (busyboxBin.isNotEmpty()) {
+        val r = RootShell.cmd("mkfs.exfat", ShellArg.literal("-V"), busyboxBin = busyboxBin, redirectErr = true, pipeInto = ShellCmd.of("head", ShellArg.literal("-1")))
         if (r.exitCode == 0) return MkfsLocation(busyboxBin, isBusyboxApplet = true)
     }
     return null

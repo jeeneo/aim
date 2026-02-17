@@ -31,12 +31,7 @@ class ShellArg private constructor(val quoted: String) {
     }
 }
 
-@JvmInline
-value class TrustedCmdFragment private constructor(val cmd: String) {
-    companion object {
-        internal fun of(cmd: String): TrustedCmdFragment = TrustedCmdFragment(cmd)
-    }
-}
+internal val VALID_CHMOD_MODES = setOf("775", "664", "777")
 
 fun pathArg(path: String): ShellArg {
     require(isValidPath(path)) { "Invalid path: $path" }
@@ -73,62 +68,113 @@ private val ALLOWED_BINARIES = setOf(
     "mkdir", "rmdir", "mknod", "test", // filesystem and misc
     "chmod", "chown", "chcon", "find", // file attributes and searching
     "dd", "hexdump", "blkid", "stat", "wc", "grep", "awk", "ls", "head", "cat", "id", "command", "echo", // utilities
-    "mke2fs", "mkfs.ext4", // formatting
+    "mke2fs", "mkfs.ext4", "mkfs.exfat", "mkexfatfs", // formatting
     "modprobe", "insmod", // probing/kernel
     "fuser", // process management
-    "/system/bin/mke2fs", "/system/bin/mkfs.ext4", // allow absolute paths for these two
+    "/system/bin/mke2fs", "/system/bin/mkfs.ext4", "/system/bin/mkfs.exfat", "/system/bin/mkexfatfs", // allow absolute paths for these
 )
+
+class ShellCmd private constructor(internal val fragment: String) {
+    companion object {
+        fun of(
+            binary: String,
+            vararg args: ShellArg,
+            busyboxBin: String = "",
+            stdinFrom: ShellArg? = null,
+        ): ShellCmd {
+            val resolved = resolveBinaryChecked(binary, busyboxBin)
+            return ShellCmd(buildString {
+                append(resolved)
+                for (a in args) { append(' '); append(a.quoted) }
+                if (stdinFrom != null) { append(" < "); append(stdinFrom.quoted) }
+            })
+        }
+        fun chain(first: ShellCmd, vararg rest: ShellCmd): ShellCmd = ShellCmd((listOf(first) + rest).joinToString(" && ") { it.fragment })
+        private fun resolveBinaryChecked(binary: String, busyboxBin: String): String {
+            val baseName = binary.substringAfterLast('/')
+            require(binary in ALLOWED_BINARIES || baseName in ALLOWED_BINARIES) {
+                "Binary not allowed in command fragment: $binary"
+            }
+            return if (busyboxBin.isNotEmpty() && !binary.startsWith("/")) {
+                "'" + busyboxBin.replace("'", "'\\''") + "' $binary"
+            } else {
+                if (binary.startsWith("/")) "'" + binary.replace("'", "'\\''") + "'"
+                else binary
+            }
+        }
+    }
+}
 
 object RootShell {
     private const val TAG = "RootShell"
+    private const val MAX_OUTPUT_CHARS = 256_000 // ~256 KB guard against unbounded reads
+    
     fun cmd(
-        binary: String,
-        vararg args: ShellArg,
-        busyboxBin: String = "",
-        pipeInto: TrustedCmdFragment? = null,
-        chain: TrustedCmdFragment? = null,
-        orChain: TrustedCmdFragment? = null,
+        command: ShellCmd,
+        pipeInto: ShellCmd? = null,
+        chain: ShellCmd? = null,
+        orChain: ShellCmd? = null,
         redirectErr: Boolean = false,
         ignoreError: Boolean = false,
         suppressErr: Boolean = false,
     ): ShellResult {
-        val resolvedBin = resolveBinary(binary, busyboxBin) ?: return ShellResult(-1, "Binary not allowed: $binary").also { Log.e(TAG, "Blocked execution of non-whitelisted binary: $binary") }
         val cmdLine = buildString {
-            append(resolvedBin)
-            for (a in args) {
-                append(' ')
-                append(a.quoted)
-            }
+            append(command.fragment)
             if (suppressErr) append(" 2>/dev/null")
             if (redirectErr) append(" 2>&1")
-            if (pipeInto != null) { append(" | "); append(pipeInto.cmd) }
-            if (chain != null) { append(" && "); append(chain.cmd) }
-            if (orChain != null) { append(" || "); append(orChain.cmd) }
+            if (pipeInto != null) { append(" | "); append(pipeInto.fragment) }
+            if (chain != null) { append(" && "); append(chain.fragment) }
+            if (orChain != null) { append(" || "); append(orChain.fragment) }
             if (ignoreError) append(" || true")
         }
         return exec(cmdLine)
+    }
+    fun cmd(
+        binary: String,
+        vararg args: ShellArg,
+        busyboxBin: String = "",
+        pipeInto: ShellCmd? = null,
+        chain: ShellCmd? = null,
+        orChain: ShellCmd? = null,
+        redirectErr: Boolean = false,
+        ignoreError: Boolean = false,
+        suppressErr: Boolean = false,
+    ): ShellResult {
+        val command = try {
+            ShellCmd.of(binary, *args, busyboxBin = busyboxBin)
+        } catch (e: IllegalArgumentException) {
+            Log.e(TAG, "Blocked execution of non-whitelisted binary: $binary")
+            return ShellResult(-1, "Binary not allowed: $binary")
+        }
+        return cmd(command, pipeInto, chain, orChain, redirectErr, ignoreError, suppressErr)
+    }
+
+    internal fun testBusybox(candidateArg: ShellArg): Boolean {
+        val result = exec("which busybox >/dev/null 2>&1")
+        return result.isSuccess
     }
 
     internal fun exec(cmdLine: String): ShellResult = try {
         val pb = ProcessBuilder("su", "-c", cmdLine).redirectErrorStream(true)
         val p = pb.start()
-        // read output BEFORE waitFor() to avoid pipe-buffer deadlock
-        val output = p.inputStream.bufferedReader().use { it.readText() }.trim()
+        val output = p.inputStream.bufferedReader().use { reader ->
+            val buf = CharArray(8192)
+            val sb = StringBuilder()
+            var n: Int
+            while (reader.read(buf).also { n = it } != -1) {
+                if (sb.length + n > MAX_OUTPUT_CHARS) {
+                    sb.append(buf, 0, maxOf(0, MAX_OUTPUT_CHARS - sb.length))
+                    while (reader.read(buf) != -1) { /* discard */ }
+                    break
+                }
+                sb.append(buf, 0, n)
+            }
+            sb.toString()
+        }.trim()
         ShellResult(p.waitFor(), output)
     } catch (e: Exception) {
         Log.e(TAG, "exec failed", e)
         ShellResult(-1, e.message ?: "Process failed")
-    }
-
-    private fun resolveBinary(binary: String, busyboxBin: String): String? {
-        val baseName = binary.substringAfterLast('/')
-        if (binary !in ALLOWED_BINARIES && baseName !in ALLOWED_BINARIES) return null
-        return if (busyboxBin.isNotEmpty() && !binary.startsWith("/")) {
-            "'" + busyboxBin.replace("'", "'\\''") + "' $binary"
-        } else {
-            if (binary.startsWith("/")) "'" + binary.replace("'", "'\\''") + "'"
-            else binary
-        }
     }
 }
 

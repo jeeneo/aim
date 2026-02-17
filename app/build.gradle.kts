@@ -23,10 +23,10 @@ android {
     }
     defaultConfig {
         applicationId = "org.codeberg.dryerlint.aim"
-        minSdk = 34 // not tested, probably wont work on anything old?
+        minSdk = 31
         targetSdk = 36
-        versionCode = 101
-        versionName = "1.0.1"
+        versionCode = 102
+        versionName = "1.0.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {

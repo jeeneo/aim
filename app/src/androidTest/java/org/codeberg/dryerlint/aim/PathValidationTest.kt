@@ -424,17 +424,6 @@ class PathValidationTest {
     }
 
     @Test
-    fun testIsValidPath_handlesVeryLongPaths() {
-        val longPath = "/sdcard/" + "a".repeat(1000) + "/file.txt"
-        isValidPath(longPath)
-    }
-
-    @Test
-    fun testIsValidPath_handlesEmptyString() {
-        isValidPath("")
-    }
-
-    @Test
     fun testValidateBindDir_handlesCaseSensitivity() {
         val result = validateBindDir("/SYSTEM/bin")
         assertNotNull("Behavior should be defined", result ?: "")

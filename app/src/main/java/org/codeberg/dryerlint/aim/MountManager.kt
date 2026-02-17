@@ -133,7 +133,7 @@ class MountManager(appContext: Context) {
         if (!isIso && RootShell.cmd("hexdump",
                 ShellArg.literal("-C"), ShellArg.literal("-n"), ShellArg.literal("20000"), imgArg,
                 busyboxBin = busyboxBin,
-                pipeInto = TrustedCmdFragment.of("grep '3a ff 26 ed'")
+                pipeInto = ShellCmd.of("grep", ShellArg.of("3a ff 26 ed"))
             ).let { it.exitCode == 0 && it.output.isNotBlank() }) return OpResult.failure(Exception("Sparse images not supported"))
 
         val fsType: FsType
@@ -191,7 +191,7 @@ class MountManager(appContext: Context) {
         // already loop-attached?
         if (RootShell.cmd("losetup", ShellArg.literal("-a"),
                 busyboxBin = busyboxBin, suppressErr = true,
-                pipeInto = TrustedCmdFragment.of("grep -F ${imgArg.quoted}")
+                pipeInto = ShellCmd.of("grep", ShellArg.literal("-F"), imgArg)
             ).let { it.exitCode == 0 && it.output.isNotBlank() }) {
             refreshMountedImages()
             return OpResult.failure(Exception("This image is already mounted"))
@@ -250,7 +250,7 @@ class MountManager(appContext: Context) {
         return OpResult.success("Unmounted ${item.mountPoint}")
     }
 
-    fun formatImage(path: String): OpResult = formatImage(path, _envStatus.value.ready, busyboxBin)
+    fun formatImage(path: String, fsType: String = "ext4"): OpResult = formatImage(path, _envStatus.value.ready, busyboxBin, fsType)
 
     fun createStorageBind(stem: String, bindDir: String): OpResult {
         if (!_envStatus.value.ready) return OpResult.failure(Exception("Environment not ready"))
@@ -279,12 +279,18 @@ class MountManager(appContext: Context) {
         val tgtArg = pathArg(target)
         val dirArg = pathArg(resolvedBindDir)
         // check if the parent directory exists with media_rw ownership so it's visible via FUSE
-        val mkdirDir = RootShell.cmd("mkdir", ShellArg.literal("-p"), dirArg, chain = TrustedCmdFragment.of("chown 1023:1023 ${dirArg.quoted} && chmod 775 ${dirArg.quoted}"))
+        val mkdirDir = RootShell.cmd("mkdir", ShellArg.literal("-p"), dirArg,
+            chain = ShellCmd.chain(
+                ShellCmd.of("chown", ShellArg.literal("1023:1023"), dirArg),
+                ShellCmd.of("chmod", enumArg("775", VALID_CHMOD_MODES), dirArg)))
         if (mkdirDir.exitCode != 0) return OpResult.failure(Exception("Failed to create storage directory: $resolvedBindDir"))
         // check if already bind-mounted
         if (RootShell.cmd("grep", ShellArg.literal("-qF"), ShellArg.of(" $target "), pathArg("/proc/mounts")).exitCode == 0) return OpResult.success("Already exposed at $target")
         // create mount point directory
-        val mkdirTgt = RootShell.cmd("mkdir", ShellArg.literal("-p"), tgtArg, chain = TrustedCmdFragment.of("chown 1023:1023 ${tgtArg.quoted} && chmod 775 ${tgtArg.quoted}"))
+        val mkdirTgt = RootShell.cmd("mkdir", ShellArg.literal("-p"), tgtArg,
+            chain = ShellCmd.chain(
+                ShellCmd.of("chown", ShellArg.literal("1023:1023"), tgtArg),
+                ShellCmd.of("chmod", enumArg("775", VALID_CHMOD_MODES), tgtArg)))
         if (mkdirTgt.exitCode != 0) return OpResult.failure(Exception("Failed to create mount point: $target"))
         // bind mount
         val r = RootShell.cmd("mount", ShellArg.literal("--bind"), srcArg, tgtArg, redirectErr = true)

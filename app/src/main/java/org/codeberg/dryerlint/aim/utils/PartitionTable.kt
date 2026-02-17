@@ -86,7 +86,7 @@ private fun fsDisplayName(fs: FsType): String = when (fs) {
     FsType.EXT4 -> "ext4"
     FsType.VFAT -> "FAT"
     FsType.EXFAT -> "exFAT"
-    FsType.ISO9660 -> "ISO 9660" // not really supported on most devices
+    else -> "Unknown"
 }
 
 data class PartitionTableInfo(
@@ -149,7 +149,7 @@ fun probePartitionFilesystems(imagePath: String, partitions: List<PartitionEntry
             Log.d(TAG, "P${part.index}: ${detected.mountType}" + if (label != null) " label='$label'" else "")
             part.copy(detectedFs = detected, detectedFsName = detected.mountType, typeName = refinedTypeName, label = label)
         } else {
-            val fsName = identifyUnsupportedFs(::probe, part.sizeBytes)
+            val fsName = identifyUnsupportedFs(::probe)
             Log.d(TAG, "P${part.index}: ${fsName ?: "unknown"} fs (type=0x${"%02X".format(part.typeId)})")
             part.copy(detectedFsName = fsName, typeName = fsName ?: part.typeName)
         }
@@ -161,11 +161,7 @@ private fun queryImageSize(busyboxBin: String, imgArg: ShellArg): Long {
     val sizeOut = RootShell.cmd("stat",
         ShellArg.literal("-c"), ShellArg.literal("%s"), imgArg,
         busyboxBin = busyboxBin, suppressErr = true,
-        orChain = if (busyboxBin.isNotEmpty()) {
-            TrustedCmdFragment.of("'" + busyboxBin.replace("'", "'\\''") + "' wc -c < ${imgArg.quoted}")
-        } else {
-            TrustedCmdFragment.of("busybox wc -c < ${imgArg.quoted}")
-        }
+        orChain = ShellCmd.of("wc", ShellArg.literal("-c"), busyboxBin = busyboxBin, stdinFrom = imgArg)
     )
     return sizeOut.output.trim().toLongOrNull() ?: 0L
 }

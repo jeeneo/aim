@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   version="1.2"
+   viewBox="0 0 512 512"
+   width="512"
+   height="512"
+   id="svg1"
+   sodipodi:docname="bg.svg"
+   inkscape:version="1.4.3 (0d15f75042, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1">
+    <inkscape:path-effect
+       effect="fillet_chamfer"
+       id="path-effect1"
+       is_visible="true"
+       lpeversion="1"
+       nodesatellites_param="F,0,1,1,0,256,0,1 @ F,0,1,1,0,256,0,1 @ F,0,1,1,0,256,0,1 @ F,0,0,1,0,256,0,1"
+       radius="0"
+       unit="px"
+       method="auto"
+       mode="F"
+       chamfer_steps="1"
+       flexible="false"
+       use_knot_distance="true"
+       apply_no_radius="true"
+       apply_with_radius="true"
+       only_selected="false"
+       hide_knots="false" />
+  </defs>
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#505050"
+     showgrid="false"
+     inkscape:zoom="0.84375"
+     inkscape:cx="191.40741"
+     inkscape:cy="261.92593"
+     inkscape:window-width="1920"
+     inkscape:window-height="1115"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg1" />
+  <style
+     id="style1">.a{fill:#c53636}</style>
+  <path
+     fill-rule="evenodd"
+     class="a"
+     d="M 512,256 A 256,256 135 0 1 256,512 256,256 45 0 1 0,256 256,256 135 0 1 256,0 256,256 45 0 1 512,256 Z"
+     id="path1"
+     inkscape:path-effect="#path-effect1"
+     inkscape:original-d="M 512,0 V 512 H 0 V 0 Z" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#ffffff;stroke:none;stroke-width:16.1704;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000"
+     d="m 256,94.296298 c -89.11491,0 -161.703704,72.588622 -161.703704,161.703692 0,89.11508 72.588794,161.70371 161.703704,161.70371 89.11491,0 161.7037,-72.58863 161.7037,-161.70371 C 417.7037,166.88492 345.11491,94.296297 256,94.296298 Z m 0,32.340742 c 71.63668,0 129.36296,57.72611 129.36296,129.36295 0,71.63685 -57.72628,129.36297 -129.36296,129.36297 -71.63668,0 -129.36297,-57.72612 -129.36297,-129.36297 0,-71.63684 57.72629,-129.36295 129.36297,-129.36295 z"
+     id="path2" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#ffffff;stroke:none;stroke-width:16.1704;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000"
+     d="m 256,223.65925 c -7.63598,0 -15.48928,2.45806 -21.85523,8.11672 -6.36595,5.65866 -10.48551,14.79136 -10.48551,24.22402 0,9.43267 4.11956,18.56537 10.48551,24.22403 6.36595,5.65866 14.21925,8.11671 21.85523,8.11671 7.63597,0 15.48927,-2.45805 21.85522,-8.11671 6.36595,-5.65866 10.48552,-14.79136 10.48552,-24.22403 0,-9.43266 -4.11957,-18.56536 -10.48552,-24.22402 -6.36595,-5.65866 -14.21925,-8.11672 -21.85522,-8.11672 z"
+     id="path3" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#ffffff;stroke:none;stroke-width:16.1704;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000"
+     d="m 256,158.97777 c -53.3923,0 -97.02223,43.62992 -97.02223,97.02222 a 16.17037,16.17037 0 0 0 16.17037,16.17037 16.17037,16.17037 0 0 0 16.17037,-16.17037 c 0,-35.91407 28.76742,-64.68148 64.68149,-64.68148 A 16.17037,16.17037 0 0 0 272.17037,175.14814 16.17037,16.17037 0 0 0 256,158.97777 Z"
+     id="path4" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#ffffff;stroke:none;stroke-width:16.1704;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000"
+     d="m 336.85185,239.82962 a 16.17037,16.17037 0 0 0 -16.17037,16.17037 c 0,35.91407 -28.76741,64.68149 -64.68148,64.68149 A 16.17037,16.17037 0 0 0 239.82963,336.85185 16.17037,16.17037 0 0 0 256,353.02222 c 53.3923,0 97.02222,-43.62993 97.02222,-97.02223 a 16.17037,16.17037 0 0 0 -16.17037,-16.17037 z"
+     id="path5" />
+</svg>

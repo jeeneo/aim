@@ -126,74 +126,6 @@ class ImageProviderSecurityTest {
     }
 
     @Test
-    fun testPathTraversalPrevention() {
-        val mountPoint = File(mountsDir, "test_mount")
-        mountPoint.mkdirs()
-        val traversalAttempt = File(mountPoint, "../outside.txt")
-        
-        try {
-            val canonical = traversalAttempt.canonicalPath
-            val mountCanonical = mountsDir.canonicalPath
-            assertFalse("Path traversal should be outside mount directory",
-                canonical.startsWith("$mountCanonical/test_mount"))
-        } finally {
-            mountPoint.deleteRecursively()
-        }
-    }
-
-    @Test
-    fun testAcceptsFileInsideMount() {
-        val mountPoint = File(mountsDir, "test_mount")
-        mountPoint.mkdirs()
-        val testFile = File(mountPoint, "test.txt")
-        testFile.writeText("test content")
-        
-        try {
-            val canonical = testFile.canonicalPath
-            val mountCanonical = mountsDir.canonicalPath
-            assertTrue("File should be inside mount directory",
-                canonical.startsWith("$mountCanonical/"))
-        } finally {
-            testFile.delete()
-            mountPoint.deleteRecursively()
-        }
-    }
-
-    @Test
-    fun testSymlinkDetection() {
-        val mountPoint = File(mountsDir, "test_mount")
-        mountPoint.mkdirs()
-        val targetFile = File(mountPoint, "target.txt")
-        targetFile.writeText("sensitive data")
-        val symlinkFile = File(mountPoint, "symlink.txt")
-        
-        try {
-            Files.createSymbolicLink(symlinkFile.toPath(), targetFile.toPath())
-            assertTrue("Symlink should be detected", Files.isSymbolicLink(symlinkFile.toPath()))
-        } finally {
-            symlinkFile.delete()
-            targetFile.delete()
-            mountPoint.deleteRecursively()
-        }
-    }
-
-    @Test
-    fun testRegularFileDetection() {
-        val mountPoint = File(mountsDir, "test_mount")
-        mountPoint.mkdirs()
-        val regularFile = File(mountPoint, "regular.txt")
-        regularFile.writeText("test content")
-        
-        try {
-            assertFalse("Regular file should not be detected as symlink", 
-                Files.isSymbolicLink(regularFile.toPath()))
-        } finally {
-            regularFile.delete()
-            mountPoint.deleteRecursively()
-        }
-    }
-
-    @Test
     fun testSafeDelete_handlesSymlinksCorrectly() {
         val mountPoint = File(mountsDir, "test_mount")
         mountPoint.mkdirs()
@@ -262,6 +194,100 @@ class ImageProviderSecurityTest {
     fun testIsChildDocument_rootNotChildOfRoot() {
         val provider = ImageProvider()
         assertFalse("Root should not be child of itself", 
-            provider.isChildDocument("root", "root"))
+            provider.isChildDocument("mounts", "mounts"))
+    }
+
+    @Test
+    fun testValidateDocumentId_rejectsNullBytes() {
+        val provider = ImageProvider()
+        val method = ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+        method.isAccessible = true
+        try {
+            method.invoke(provider, "/valid\u0000inject")
+            fail("Should throw for null byte in doc ID")
+        } catch (e: Exception) {
+            assertTrue(e.cause is SecurityException)
+        }
+    }
+
+    @Test
+    fun testValidateDocumentId_rejectsNewlines() {
+        val provider = ImageProvider()
+        val method = ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+        method.isAccessible = true
+        try {
+            method.invoke(provider, "/valid\nmalicious")
+            fail("Should throw for newline in doc ID")
+        } catch (e: Exception) {
+            assertTrue(e.cause is SecurityException)
+        }
+    }
+
+    @Test
+    fun testValidateDocumentId_rejectsCarriageReturn() {
+        val provider = ImageProvider()
+        val method = ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+        method.isAccessible = true
+        try {
+            method.invoke(provider, "/valid\rmalicious")
+            fail("Should throw for carriage return in doc ID")
+        } catch (e: Exception) {
+            assertTrue(e.cause is SecurityException)
+        }
+    }
+
+    @Test
+    fun testValidateDocumentId_rejectsPathTraversal() {
+        val provider = ImageProvider()
+        val method = ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+        method.isAccessible = true
+        try {
+            method.invoke(provider, "/data/../etc/passwd")
+            fail("Should throw for path traversal in doc ID")
+        } catch (e: Exception) {
+            assertTrue(e.cause is SecurityException)
+        }
+    }
+
+    @Test
+    fun testValidateDocumentId_rejectsRelativePath() {
+        val provider = ImageProvider()
+        val method = ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+        method.isAccessible = true
+        try {
+            method.invoke(provider, "relative/path")
+            fail("Should throw for relative path in doc ID")
+        } catch (e: Exception) {
+            assertTrue(e.cause is SecurityException)
+        }
+    }
+
+    @Test
+    fun testValidateDocumentId_rejectsOverlongId() {
+        val provider = ImageProvider()
+        val method = ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+        method.isAccessible = true
+        try {
+            method.invoke(provider, "/" + "a".repeat(5_000))
+            fail("Should throw for overlong doc ID")
+        } catch (e: Exception) {
+            assertTrue(e.cause is SecurityException)
+        }
+    }
+
+    @Test
+    fun testValidateDocumentId_acceptsRootDocId() {
+        val provider = ImageProvider()
+        val method = ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+        method.isAccessible = true
+        method.invoke(provider, "mounts")
+    }
+
+    @Test
+    fun testValidateDocumentId_acceptsValidAbsolutePath() {
+        val provider = ImageProvider()
+        val method = ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+        method.isAccessible = true
+        method.invoke(provider, "/data/user/0/org.codeberg.dryerlint.aim/files/mounts/test/file.txt")
     }
 }

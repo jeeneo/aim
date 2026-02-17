@@ -25,7 +25,7 @@
 -keepclassmembers class org.codeberg.dryerlint.aim.utils.PartitionTableInfo { *; }
 -keepclassmembers class org.codeberg.dryerlint.aim.utils.ResolvedImage { *; }
 
--keep class org.codeberg.dryerlint.aim.utils.TrustedCmdFragment { *; }
+-keep class org.codeberg.dryerlint.aim.utils.ShellCmd { *; }
 
 -assumenosideeffects class android.util.Log {
     public static int d(...);
