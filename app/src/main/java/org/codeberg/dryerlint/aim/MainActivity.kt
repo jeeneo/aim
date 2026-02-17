@@ -18,6 +18,7 @@
 @file:Suppress("SpellCheckingInspection", "AssignedValueIsNeverRead")
 package org.codeberg.dryerlint.aim
 
+import android.annotation.SuppressLint
 import android.net.Uri
 import android.os.Bundle
 import android.view.ViewGroup
@@ -51,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -93,9 +95,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@SuppressLint("SdCardPath")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AimApp(viewModel: AimViewModel = viewModel()) {
+fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     val versionName = remember {
         val version = BuildConfig.VERSION_NAME.removeSuffix(".debug")
         "$version (${BuildConfig.BUILD_TYPE})"
@@ -107,8 +110,9 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
     val envChecked by viewModel.envChecked.collectAsState()
     val images by viewModel.images.collectAsState()
     val alerts by viewModel.alerts.collectAsState()
-    val partitionState by viewModel.partitionPicker.collectAsState()
+    val PartitionState by viewModel.partitionPicker.collectAsState()
     val bindDir by viewModel.bindDir.collectAsState()
+    val pkgName = LocalContext.current.packageName
     var dialogImagePath by remember { mutableStateOf<String?>(null) }
     var showBindDirEdit by remember { mutableStateOf(false) }
 
@@ -117,7 +121,8 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
     }
 
     LaunchedEffect(alerts) {
-        val alert = alerts.firstOrNull() ?: return@LaunchedEffect
+        // always show the most-recent alert (new notifications replace the old)
+        val alert = alerts.lastOrNull() ?: return@LaunchedEffect
         suspendCancellableCoroutine { cont ->
             val snackbar = Snackbar.make(snackbarAnchor, alert.message, Snackbar.LENGTH_LONG)
             snackbar.addCallback(object : Snackbar.Callback() {
@@ -144,7 +149,7 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
         )
     }
 
-    val ppState = partitionState
+    val ppState = PartitionState
     if (ppState != null) {
         PartitionPickerDialog(
             title = ppState.displayName,
@@ -177,7 +182,7 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
             onChangePartition = {
                 viewModel.changePartition(dialogImage.path)
             },
-            showChangePartition = dialogImage.hasPartitions,
+            isMultipart = dialogImage.hasPartitions,
         )
     }
 
@@ -259,11 +264,8 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
                                 val stem = img.mountedImage?.mountPoint?.substringAfterLast('/') ?: img.displayName
                                 val paths = buildList {
                                     if (img.isExposed) add("content://aim/$stem")
-                                    if (img.isStorageExposed) add(when {
-                                        bindDir.startsWith("/mnt/media_rw") -> "/mnt/media_rw/$stem"
-                                        else -> "$bindDir/$stem"
-                                    })
-                                    if (isEmpty()) add("internal/mounts/$stem")
+                                    if (img.isStorageExposed) add("$bindDir/$stem")
+                                    if (isEmpty()) add("/data/data/$pkgName/mounts/$stem")
                                 }
                                 "${img.displayName} (${paths.joinToString(", ")})"
                             }
@@ -299,7 +301,8 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
                             title = stringResource(R.string.pref_bindmount_dir_name),
                             summary = bindDir,
                             enabled = canAct,
-                            onClick = { showBindDirEdit = true }
+                            onClick = { showBindDirEdit = true },
+                            onLongClick = { viewModel.setBindDir("/data/media/0/mounts") }
                         )
                     }
                 }
@@ -314,7 +317,8 @@ fun AimApp(viewModel: AimViewModel = viewModel()) {
                         PreferenceItem(
                             title = stringResource(R.string.pref_version_name),
                             summary = versionName,
-                            onClick = { uriHandler.openUri("https://codeberg.org/dryerlint/AIM") }
+                            onClick = { uriHandler.openUri("https://codeberg.org/dryerlint/AIM") },
+                            onLongClick = { viewModel.alert(Alert.Info("I do nothing")) }
                         )
                     }
                 }

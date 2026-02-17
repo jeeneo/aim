@@ -19,7 +19,7 @@
 -keepclassmembers class org.codeberg.dryerlint.aim.EnvironmentStatus { *; }
 -keepclassmembers class org.codeberg.dryerlint.aim.ImportedImage { *; }
 -keepclassmembers class org.codeberg.dryerlint.aim.ImageInfo { *; }
--keepclassmembers class org.codeberg.dryerlint.aim.partitionState { *; }
+-keepclassmembers class org.codeberg.dryerlint.aim.PartitionState { *; }
 -keepclassmembers class org.codeberg.dryerlint.aim.utils.ShellResult { *; }
 -keepclassmembers class org.codeberg.dryerlint.aim.utils.PartitionEntry { *; }
 -keepclassmembers class org.codeberg.dryerlint.aim.utils.PartitionTableInfo { *; }

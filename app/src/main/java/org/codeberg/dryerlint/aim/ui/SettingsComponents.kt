@@ -20,6 +20,7 @@ package org.codeberg.dryerlint.aim.ui
 
 import android.content.res.ColorStateList
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -80,13 +81,17 @@ fun PreferenceItem(
     summary: String? = null,
     enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     summaryColor: androidx.compose.ui.graphics.Color? = null,
     titleFontWeight: FontWeight? = null,
 ) {
     val modifier = Modifier
         .fillMaxWidth()
         .then(
-            if (onClick != null && enabled) Modifier.clickable(onClick = onClick)
+            if ((onClick != null || onLongClick != null) && enabled) Modifier.combinedClickable(
+                onClick = { onClick?.invoke() },
+                onLongClick = { onLongClick?.invoke() },
+            )
             else Modifier
         )
         .alpha(if (enabled) 1f else 0.38f)
@@ -219,7 +224,7 @@ fun ImageOptionsDialog(
     onFormat: (String) -> Unit = {},
     showFormat: Boolean = true,
     onChangePartition: () -> Unit = {},
-    showChangePartition: Boolean = false,
+    isMultipart: Boolean = false,
 ) {
     var confirmFormat by remember { mutableStateOf(false) }
     var selectedFsType by remember { mutableStateOf("ext4") }
@@ -340,17 +345,16 @@ fun ImageOptionsDialog(
                             .padding(horizontal = 8.dp, vertical = 12.dp),
                     )
                 }
-                if (showChangePartition) {
-                    Text(
-                        text = stringResource(R.string.pref_change_partition_name),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onChangePartition() }
-                            .padding(horizontal = 8.dp, vertical = 12.dp),
-                    )
-                }
+                Text(
+                    text = if (isMultipart) stringResource(R.string.pref_change_partition_name)
+                    else stringResource(R.string.pref_partition_info_name),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onChangePartition() }
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                )
                 Text(
                     text = stringResource(R.string.dialog_remove_image),
                     style = MaterialTheme.typography.bodyMedium,

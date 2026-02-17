@@ -68,6 +68,7 @@ fun PartitionPickerDialog(
     onDismiss: () -> Unit,
     onSelect: (PartitionEntry) -> Unit,
 ) {
+    val infoOnly = partitions.size == 1
     val savedIndex = initialSelectedIndex?.let { idx -> partitions.indexOfFirst { it.index == idx } }?.takeIf { it >= 0 }
     val firstMountable = partitions.indexOfFirst { it.detectedFs != null }
     var selected by remember { mutableIntStateOf(savedIndex ?: (if (firstMountable >= 0) firstMountable else 0)) }
@@ -76,10 +77,10 @@ fun PartitionPickerDialog(
         onDismissRequest = onDismiss,
         title = {
             Column {
-                Text(text = title, style = MaterialTheme.typography.titleMedium)
+                Text(text = "$title (${scheme.name})", style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = pluralStringResource(R.plurals.dialog_partition_description, partitions.size, partitions.size, scheme.name),
+                    text = pluralStringResource(R.plurals.dialog_partition_description, partitions.size, partitions.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -97,7 +98,7 @@ fun PartitionPickerDialog(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
                             .then(
-                                if (mountable) Modifier.clickable { selected = idx }
+                                if (!infoOnly && mountable) Modifier.clickable { selected = idx }
                                 else Modifier.alpha(0.45f)
                             )
                             .padding(vertical = 6.dp, horizontal = 4.dp),
@@ -106,8 +107,8 @@ fun PartitionPickerDialog(
                         Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
                             RadioButton(
                                 selected = selected == idx,
-                                onClick = if (mountable) ({ selected = idx }) else null,
-                                enabled = mountable,
+                                onClick = if (!infoOnly && mountable) ({ selected = idx }) else null,
+                                enabled = !infoOnly && mountable,
                             )
                         }
                         Spacer(modifier = Modifier.width(8.dp))
@@ -167,11 +168,17 @@ fun PartitionPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = { onSelect(partitions[selected]) },
-                enabled = partitions.getOrNull(selected)?.detectedFs != null,
-            ) {
-                Text(text = stringResource(R.string.dialog_partition_mount))
+            if (infoOnly) {
+                TextButton(onClick = onDismiss) {
+                    Text(text = stringResource(R.string.dialog_ok))
+                }
+            } else {
+                TextButton(
+                    onClick = { onSelect(partitions[selected]) },
+                    enabled = partitions.getOrNull(selected)?.detectedFs != null,
+                ) {
+                    Text(text = stringResource(R.string.dialog_partition_mount))
+                }
             }
         },
         dismissButton = {

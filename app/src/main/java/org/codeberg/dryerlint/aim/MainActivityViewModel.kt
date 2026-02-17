@@ -71,8 +71,7 @@ sealed interface Alert {
     data class Info(override val message: String) : Alert
 }
 
-// state for the partition picker dialog
-data class partitionState(
+data class PartitionState(
     val imagePath: String,
     val displayName: String,
     val partitions: List<PartitionEntry>,
@@ -81,10 +80,9 @@ data class partitionState(
     val selectedPartitionIndex: Int? = null,
 )
 
-class AimViewModel(application: Application) : AndroidViewModel(application) {
-
+class MainActivityViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
-        private val TAG = AimViewModel::class.java.simpleName
+        private val TAG = MainActivityViewModel::class.java.simpleName
         private const val PREFS_SETTINGS = "app_settings"
         private const val KEY_BIND_DIR = "bindmount_dir"
         private const val DEFAULT_BIND_DIR = "/data/media/0/mounts"
@@ -100,9 +98,9 @@ class AimViewModel(application: Application) : AndroidViewModel(application) {
     private val _images = MutableStateFlow<List<ImageInfo>>(emptyList())
     val images: StateFlow<List<ImageInfo>> = _images
     val envStatus: StateFlow<EnvironmentStatus> = mountManager.envStatus
-    private val _partitionPicker = MutableStateFlow<partitionState?>(null)
-    val partitionPicker: StateFlow<partitionState?> = _partitionPicker
-    private val pendingPartitions = ArrayDeque<partitionState>()
+    private val _partitionPicker = MutableStateFlow<PartitionState?>(null)
+    val partitionPicker: StateFlow<PartitionState?> = _partitionPicker
+    private val pendingPartitions = ArrayDeque<PartitionState>()
     private val imageStore = ImageStore(application)
     private val settingsPrefs = application.getSharedPreferences(PREFS_SETTINGS, Context.MODE_PRIVATE)
 
@@ -122,6 +120,7 @@ class AimViewModel(application: Application) : AndroidViewModel(application) {
         }
         _bindDir.value = trimmed
         settingsPrefs.edit { putString(KEY_BIND_DIR, trimmed) }
+        alert(Alert.Info("Bind directory set to $trimmed"))
     }
 
     init {
@@ -219,9 +218,11 @@ class AimViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun alert(alert: Alert) { _alerts.update { it + alert } }
+    fun alert(alert: Alert) {
+        _alerts.value = listOf(alert)
+    }
 
-    private fun queuePartitions(state: partitionState) {
+    private fun queuePartitions(state: PartitionState) {
         val current = _partitionPicker.value
         if (current?.imagePath == state.imagePath) {
             _partitionPicker.value = state
@@ -461,7 +462,7 @@ class AimViewModel(application: Application) : AndroidViewModel(application) {
     private fun showPartitionDialog(imagePath: String, displayName: String) {
         val pr = mountManager.pendingPartitionResult ?: return
         val imported = loadImportedImages().find { it.path == imagePath }
-        queuePartitions(partitionState(
+        queuePartitions(PartitionState(
             imagePath = imagePath,
             displayName = displayName,
             partitions = pr.partitions,
@@ -539,7 +540,7 @@ class AimViewModel(application: Application) : AndroidViewModel(application) {
                 val imported = loadImportedImages().find { it.path == path }
                 val result = withContext(Dispatchers.IO) { mountManager.probePartitions(path) }
                 if (result != null) {
-                    queuePartitions(partitionState(
+                    queuePartitions(PartitionState(
                         imagePath = path,
                         displayName = imported?.displayName ?: File(path).name,
                         partitions = result.partitions,
@@ -548,7 +549,33 @@ class AimViewModel(application: Application) : AndroidViewModel(application) {
                         selectedPartitionIndex = imported?.selectedPartitionIndex,
                     ))
                 } else {
-                    alert(Alert.Failure("Could not read partition table"))
+                    val fileSize = withContext(Dispatchers.IO) { File(path).length() }
+                    val detectedFs = try {
+                        withContext(Dispatchers.IO) { org.codeberg.dryerlint.aim.utils.detectFilesystem(path, "") }
+                    } catch (_: Exception) {
+                        null
+                    }
+                    val single = PartitionEntry(
+                        index = 1,
+                        bootable = false,
+                        typeId = 0,
+                        typeName = detectedFs?.mountType ?: "Image",
+                        startLBA = 0L,
+                        sizeSectors = if (fileSize > 0) fileSize / 512 else 0L,
+                        offsetBytes = 0L,
+                        sizeBytes = fileSize,
+                        detectedFs = detectedFs,
+                        detectedFsName = detectedFs?.mountType,
+                        label = null,
+                    )
+                    queuePartitions(PartitionState(
+                        imagePath = path,
+                        displayName = imported?.displayName ?: File(path).name,
+                        partitions = listOf(single),
+                        totalSizeBytes = fileSize,
+                        scheme = PartitionScheme.MBR,
+                        selectedPartitionIndex = imported?.selectedPartitionIndex,
+                    ))
                 }
             }
         }
@@ -568,7 +595,7 @@ class AimViewModel(application: Application) : AndroidViewModel(application) {
         }
         val partition = pr.partitions.find { it.index == partIndex }
         if (partition == null) {
-            queuePartitions(partitionState(
+            queuePartitions(PartitionState(
                 imagePath = path,
                 displayName = displayName,
                 partitions = pr.partitions,
