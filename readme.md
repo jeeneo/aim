@@ -49,7 +49,7 @@ It is installed as a normal app and root access is required.
 
 5. That's it!
 
-AIM does not need to run in the background. Once configured, the mounted images remain available until they're explicitly disabled or the device is rebooted
+AIM does not need to run in the background. Once configured, the mounted images remain available until they're explicitly disabled or the device is rebooted.
 
 > [!IMPORTANT]
 > Before uninstalling the app, check and unmount all images to prevent unexpected issues or data loss
