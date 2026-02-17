@@ -11,9 +11,7 @@ AIM is an Android app for mounting `.img` files on your phone. Supports `ext4`, 
 
 It is installed as a normal app and root access is required.
 
-<img src="assets/screenshots/light.png" alt="light mode screenshot" width="200" /> <img src="assets/screenshots/dark.png" alt="dark mode screenshot" width="200" />
-
-<br>
+<img src="assets/screenshots/dark.png" alt="dark screenshot" width="200" />
 
 ## Features
 
