@@ -18,7 +18,7 @@ It is installed as a normal app and root access is required.
 ## Features
 
 * Supports Android 12+
-* Supports mounting multiple devices at once
+* Supports mounting multiple images at once
   - Including mixing and matching different filesystems
 * Formatting (`exFAT`, `ext4`)
 * Multi partition support
