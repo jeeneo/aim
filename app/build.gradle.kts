@@ -14,7 +14,9 @@ val releaseStoreFile = localProperties["keystore.path"]
 val releaseStorePassword = localProperties["keystore.password"]
 val releaseKeyAlias = localProperties["keystore.alias"]
 val releaseKeyPassword = localProperties["keystore.keyPassword"]
-val hasReleaseSigning = listOf(releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword).all { !it.isNullOrBlank() }
+val hasReleaseSigning = listOf(
+    releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword
+).all { !it.isNullOrBlank() }
 
 android {
     namespace = "org.codeberg.dryerlint.aim"
@@ -53,8 +55,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             )
         }
     }

@@ -1,19 +1,19 @@
 /**
-* Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
 package org.codeberg.dryerlint.aim
 
@@ -24,18 +24,18 @@ import android.util.Log
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import org.codeberg.dryerlint.aim.utils.ImagePathResolver
-import org.codeberg.dryerlint.aim.utils.PartitionEntry
-import org.codeberg.dryerlint.aim.utils.PartitionScheme
-import org.codeberg.dryerlint.aim.utils.PartitionedImageException
-import org.codeberg.dryerlint.aim.utils.validateBindDir
-import org.codeberg.dryerlint.aim.utils.validatePath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.codeberg.dryerlint.aim.utils.ImagePathResolver
+import org.codeberg.dryerlint.aim.utils.PartitionEntry
+import org.codeberg.dryerlint.aim.utils.PartitionScheme
+import org.codeberg.dryerlint.aim.utils.PartitionedImageException
+import org.codeberg.dryerlint.aim.utils.validateBindDir
+import org.codeberg.dryerlint.aim.utils.validatePath
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -66,6 +66,7 @@ data class ImageInfo(
 
 sealed interface Alert {
     val message: String
+
     data class Failure(override val message: String) : Alert
     data class Success(override val message: String) : Alert
     data class Info(override val message: String) : Alert
@@ -87,6 +88,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         private const val KEY_BIND_DIR = "bindmount_dir"
         private const val DEFAULT_BIND_DIR = "/data/media/0/mounts"
     }
+
     val mountManager = MountManager(application)
     private val operationsInProgress = AtomicInteger(0)
     private val _canAct = MutableStateFlow(true)
@@ -102,7 +104,8 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     val partitionPicker: StateFlow<PartitionState?> = _partitionPicker
     private val pendingPartitions = ArrayDeque<PartitionState>()
     private val imageStore = ImageStore(application)
-    private val settingsPrefs = application.getSharedPreferences(PREFS_SETTINGS, Context.MODE_PRIVATE)
+    private val settingsPrefs =
+        application.getSharedPreferences(PREFS_SETTINGS, Context.MODE_PRIVATE)
 
     private val _bindDir = MutableStateFlow(
         settingsPrefs.getString(KEY_BIND_DIR, DEFAULT_BIND_DIR) ?: DEFAULT_BIND_DIR
@@ -166,13 +169,16 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         return result.exceptionOrNull()?.message
     }
 
-    private fun stemFor(path: String, allImported: List<ImportedImage> = loadImportedImages()): String {
+    private fun stemFor(
+        path: String, allImported: List<ImportedImage> = loadImportedImages()
+    ): String {
         val img = allImported.find { it.path == path }
         val allLabels = allImported.associate { it.path to it.diskLabel }
         return generateMountStem(path, allImported.map { it.path }, img?.diskLabel, allLabels)
     }
 
-    private fun modeFor(imported: ImportedImage?): MountMode = if (imported?.exposeInSAF == true) MountMode.PUBLIC else MountMode.LOCAL
+    private fun modeFor(imported: ImportedImage?): MountMode =
+        if (imported?.exposeInSAF == true) MountMode.PUBLIC else MountMode.LOCAL
 
     private suspend fun mountOrPartitionMount(
         path: String,
@@ -183,7 +189,9 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         val mode = modeFor(imported)
         val storedPart = imported?.selectedPartitionIndex
         return withContext(Dispatchers.IO) {
-            if (storedPart != null) mountWithStoredPartition(path, storedPart, mode, stem, displayName)
+            if (storedPart != null) mountWithStoredPartition(
+                path, storedPart, mode, stem, displayName
+            )
             else mountManager.mountImage(path, mode, stem)
         }
     }
@@ -241,10 +249,13 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private fun dequeueNextPartitionPicker() {
-        _partitionPicker.value = if (pendingPartitions.isEmpty()) null else pendingPartitions.removeFirst()
+        _partitionPicker.value =
+            if (pendingPartitions.isEmpty()) null else pendingPartitions.removeFirst()
     }
 
-    fun acknowledgeFirstAlert() { _alerts.update { it.drop(1) } }
+    fun acknowledgeFirstAlert() {
+        _alerts.update { it.drop(1) }
+    }
 
     fun checkEnvironment() {
         viewModelScope.launch {
@@ -286,12 +297,16 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 val hasPartitions = withContext(Dispatchers.IO) {
                     mountManager.probePartitions(path) != null
                 }
-                saveImportedImages(current + ImportedImage(path, name,
-                    exposeInSAF = false,
-                    exposeInStorage = false,
-                    selectedPartitionIndex = null,
-                    hasPartitions = hasPartitions
-                ))
+                saveImportedImages(
+                    current + ImportedImage(
+                        path,
+                        name,
+                        exposeInSAF = false,
+                        exposeInStorage = false,
+                        selectedPartitionIndex = null,
+                        hasPartitions = hasPartitions
+                    )
+                )
                 rebuildImageList()
                 alert(Alert.Info("Added: $name"))
             }
@@ -387,7 +402,11 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             result.onFailure { e ->
                 if (e is PartitionedImageException) {
                     if (imported?.hasPartitions != true) {
-                        updateImportedImage(img.path) { it.copy(hasPartitions = true, selectedPartitionIndex = null) }
+                        updateImportedImage(img.path) {
+                            it.copy(
+                                hasPartitions = true, selectedPartitionIndex = null
+                            )
+                        }
                     }
                     showPartitionDialog(img.path, img.displayName)
                 } else {
@@ -420,7 +439,11 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             result.onFailure { e ->
                 if (e is PartitionedImageException) {
                     if (imported?.hasPartitions != true) {
-                        updateImportedImage(img.path) { it.copy(hasPartitions = true, selectedPartitionIndex = null) }
+                        updateImportedImage(img.path) {
+                            it.copy(
+                                hasPartitions = true, selectedPartitionIndex = null
+                            )
+                        }
                     }
                     showPartitionDialog(img.path, img.displayName)
                 } else {
@@ -462,14 +485,16 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     private fun showPartitionDialog(imagePath: String, displayName: String) {
         val pr = mountManager.pendingPartitionResult ?: return
         val imported = loadImportedImages().find { it.path == imagePath }
-        queuePartitions(PartitionState(
-            imagePath = imagePath,
-            displayName = displayName,
-            partitions = pr.partitions,
-            totalSizeBytes = pr.tableInfo.totalSizeBytes,
-            scheme = pr.tableInfo.scheme,
-            selectedPartitionIndex = imported?.selectedPartitionIndex,
-        ))
+        queuePartitions(
+            PartitionState(
+                imagePath = imagePath,
+                displayName = displayName,
+                partitions = pr.partitions,
+                totalSizeBytes = pr.tableInfo.totalSizeBytes,
+                scheme = pr.tableInfo.scheme,
+                selectedPartitionIndex = imported?.selectedPartitionIndex,
+            )
+        )
     }
 
     fun formatImage(path: String, fsType: String = "ext4") {
@@ -492,7 +517,11 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 result.onSuccess { msg ->
                     alert(Alert.Success(msg))
                     // clear partition flags since formatting removes the partition table
-                    updateImportedImage(path) { it.copy(hasPartitions = false, selectedPartitionIndex = null, diskLabel = null) }
+                    updateImportedImage(path) {
+                        it.copy(
+                            hasPartitions = false, selectedPartitionIndex = null, diskLabel = null
+                        )
+                    }
                 }.onFailure { e -> alert(Alert.Failure(e.message ?: "Format failed")) }
                 refreshAndRebuild()
             }
@@ -515,7 +544,11 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     fun selectPartition(partition: PartitionEntry) {
         val picker = _partitionPicker.value ?: return
         dequeueNextPartitionPicker()
-        updateImportedImage(picker.imagePath) { it.copy(selectedPartitionIndex = partition.index, diskLabel = partition.label) }
+        updateImportedImage(picker.imagePath) {
+            it.copy(
+                selectedPartitionIndex = partition.index, diskLabel = partition.label
+            )
+        }
         val current = _images.value.find { it.path == picker.imagePath }
         if (current?.isMounted != true || current.mountedImage == null) {
             rebuildImageList()
@@ -527,9 +560,17 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 val stem = stemFor(picker.imagePath)
                 unmountWithCleanup(current.mountedImage, stem)
                 val imported = loadImportedImages().find { it.path == picker.imagePath }
-                val r = withContext(Dispatchers.IO) { mountManager.mountPartition(picker.imagePath, partition, modeFor(imported), stem) }
+                val r = withContext(Dispatchers.IO) {
+                    mountManager.mountPartition(
+                        picker.imagePath, partition, modeFor(imported), stem
+                    )
+                }
                 refreshAndRebuild(notifySaf = true)
-                alert(if (r.isSuccess) Alert.Success("Partition ${partition.index} mounted") else Alert.Failure("Mount failed: ${r.exceptionOrNull()?.message}"))
+                alert(
+                    if (r.isSuccess) Alert.Success("Partition ${partition.index} mounted") else Alert.Failure(
+                        "Mount failed: ${r.exceptionOrNull()?.message}"
+                    )
+                )
             }
         }
     }
@@ -540,18 +581,24 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 val imported = loadImportedImages().find { it.path == path }
                 val result = withContext(Dispatchers.IO) { mountManager.probePartitions(path) }
                 if (result != null) {
-                    queuePartitions(PartitionState(
-                        imagePath = path,
-                        displayName = imported?.displayName ?: File(path).name,
-                        partitions = result.partitions,
-                        totalSizeBytes = result.tableInfo.totalSizeBytes,
-                        scheme = result.tableInfo.scheme,
-                        selectedPartitionIndex = imported?.selectedPartitionIndex,
-                    ))
+                    queuePartitions(
+                        PartitionState(
+                            imagePath = path,
+                            displayName = imported?.displayName ?: File(path).name,
+                            partitions = result.partitions,
+                            totalSizeBytes = result.tableInfo.totalSizeBytes,
+                            scheme = result.tableInfo.scheme,
+                            selectedPartitionIndex = imported?.selectedPartitionIndex
+                        )
+                    )
                 } else {
                     val fileSize = withContext(Dispatchers.IO) { File(path).length() }
                     val detectedFs = try {
-                        withContext(Dispatchers.IO) { org.codeberg.dryerlint.aim.utils.detectFilesystem(path, "") }
+                        withContext(Dispatchers.IO) {
+                            org.codeberg.dryerlint.aim.utils.detectFilesystem(
+                                path, ""
+                            )
+                        }
                     } catch (_: Exception) {
                         null
                     }
@@ -568,14 +615,16 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                         detectedFsName = detectedFs?.mountType,
                         label = null,
                     )
-                    queuePartitions(PartitionState(
-                        imagePath = path,
-                        displayName = imported?.displayName ?: File(path).name,
-                        partitions = listOf(single),
-                        totalSizeBytes = fileSize,
-                        scheme = PartitionScheme.MBR,
-                        selectedPartitionIndex = imported?.selectedPartitionIndex,
-                    ))
+                    queuePartitions(
+                        PartitionState(
+                            imagePath = path,
+                            displayName = imported?.displayName ?: File(path).name,
+                            partitions = listOf(single),
+                            totalSizeBytes = fileSize,
+                            scheme = PartitionScheme.MBR,
+                            selectedPartitionIndex = imported?.selectedPartitionIndex,
+                        )
+                    )
                 }
             }
         }
@@ -590,19 +639,25 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     ): OpResult {
         val pr = mountManager.probePartitions(path)
         if (pr == null) {
-            updateImportedImage(path) { it.copy(hasPartitions = false, selectedPartitionIndex = null, diskLabel = null) }
+            updateImportedImage(path) {
+                it.copy(
+                    hasPartitions = false, selectedPartitionIndex = null, diskLabel = null
+                )
+            }
             return mountManager.mountImage(path, mode, stem)
         }
         val partition = pr.partitions.find { it.index == partIndex }
         if (partition == null) {
-            queuePartitions(PartitionState(
-                imagePath = path,
-                displayName = displayName,
-                partitions = pr.partitions,
-                totalSizeBytes = pr.tableInfo.totalSizeBytes,
-                scheme = pr.tableInfo.scheme,
-                selectedPartitionIndex = null,
-            ))
+            queuePartitions(
+                PartitionState(
+                    imagePath = path,
+                    displayName = displayName,
+                    partitions = pr.partitions,
+                    totalSizeBytes = pr.tableInfo.totalSizeBytes,
+                    scheme = pr.tableInfo.scheme,
+                    selectedPartitionIndex = null,
+                )
+            )
             return OpResult.failure(PartitionedImageException(pr.tableInfo))
         }
         return mountManager.mountPartition(path, partition, mode, stem)

@@ -1,19 +1,19 @@
 /**
-* Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
 package org.codeberg.dryerlint.aim.utils
 
@@ -63,15 +63,41 @@ fun loopDevArg(dev: String): ShellArg {
 
 // binaries that are allowed to execute as root
 private val ALLOWED_BINARIES = setOf(
-    "mount", "umount", // mounting
+    "mount",
+    "umount", // mounting
     "losetup", // loop devices
-    "mkdir", "rmdir", "mknod", "test", // filesystem and misc
-    "chmod", "chown", "chcon", "find", // file attributes and searching
-    "dd", "hexdump", "blkid", "stat", "wc", "grep", "awk", "ls", "head", "cat", "id", "command", "echo", // utilities
-    "mke2fs", "mkfs.ext4", "mkfs.exfat", "mkexfatfs", // formatting
-    "modprobe", "insmod", // probing/kernel
+    "mkdir",
+    "rmdir",
+    "mknod",
+    "test", // filesystem and misc
+    "chmod",
+    "chown",
+    "chcon",
+    "find", // file attributes and searching
+    "dd",
+    "hexdump",
+    "blkid",
+    "stat",
+    "wc",
+    "grep",
+    "awk",
+    "ls",
+    "head",
+    "cat",
+    "id",
+    "command",
+    "echo", // utilities
+    "mke2fs",
+    "mkfs.ext4",
+    "mkfs.exfat",
+    "mkexfatfs", // formatting
+    "modprobe",
+    "insmod", // probing/kernel
     "fuser", // process management
-    "/system/bin/mke2fs", "/system/bin/mkfs.ext4", "/system/bin/mkfs.exfat", "/system/bin/mkexfatfs", // allow absolute paths for these
+    "/system/bin/mke2fs",
+    "/system/bin/mkfs.ext4",
+    "/system/bin/mkfs.exfat",
+    "/system/bin/mkexfatfs", // allow absolute paths for these
 )
 
 class ShellCmd private constructor(internal val fragment: String) {
@@ -85,11 +111,18 @@ class ShellCmd private constructor(internal val fragment: String) {
             val resolved = resolveBinaryChecked(binary, busyboxBin)
             return ShellCmd(buildString {
                 append(resolved)
-                for (a in args) { append(' '); append(a.quoted) }
-                if (stdinFrom != null) { append(" < "); append(stdinFrom.quoted) }
+                for (a in args) {
+                    append(' '); append(a.quoted)
+                }
+                if (stdinFrom != null) {
+                    append(" < "); append(stdinFrom.quoted)
+                }
             })
         }
-        fun chain(first: ShellCmd, vararg rest: ShellCmd): ShellCmd = ShellCmd((listOf(first) + rest).joinToString(" && ") { it.fragment })
+
+        fun chain(first: ShellCmd, vararg rest: ShellCmd): ShellCmd =
+            ShellCmd((listOf(first) + rest).joinToString(" && ") { it.fragment })
+
         private fun resolveBinaryChecked(binary: String, busyboxBin: String): String {
             val baseName = binary.substringAfterLast('/')
             require(binary in ALLOWED_BINARIES || baseName in ALLOWED_BINARIES) {
@@ -108,7 +141,7 @@ class ShellCmd private constructor(internal val fragment: String) {
 object RootShell {
     private const val TAG = "RootShell"
     private const val MAX_OUTPUT_CHARS = 256_000 // ~256 KB guard against unbounded reads
-    
+
     fun cmd(
         command: ShellCmd,
         pipeInto: ShellCmd? = null,
@@ -122,13 +155,20 @@ object RootShell {
             append(command.fragment)
             if (suppressErr) append(" 2>/dev/null")
             if (redirectErr) append(" 2>&1")
-            if (pipeInto != null) { append(" | "); append(pipeInto.fragment) }
-            if (chain != null) { append(" && "); append(chain.fragment) }
-            if (orChain != null) { append(" || "); append(orChain.fragment) }
+            if (pipeInto != null) {
+                append(" | "); append(pipeInto.fragment)
+            }
+            if (chain != null) {
+                append(" && "); append(chain.fragment)
+            }
+            if (orChain != null) {
+                append(" || "); append(orChain.fragment)
+            }
             if (ignoreError) append(" || true")
         }
         return exec(cmdLine)
     }
+
     fun cmd(
         binary: String,
         vararg args: ShellArg,
@@ -163,11 +203,12 @@ object RootShell {
             var n: Int
             while (reader.read(buf).also { n = it } != -1) {
                 if (sb.length + n > MAX_OUTPUT_CHARS) {
-                    sb.append(buf, 0, maxOf(0, MAX_OUTPUT_CHARS - sb.length))
-                    while (reader.read(buf) != -1) { /* discard */ }
+                    sb.appendRange(buf, 0, maxOf(0, MAX_OUTPUT_CHARS - sb.length))
+                    while (reader.read(buf) != -1) { /* discard */
+                    }
                     break
                 }
-                sb.append(buf, 0, n)
+                sb.appendRange(buf, 0, n)
             }
             sb.toString()
         }.trim()
@@ -224,10 +265,15 @@ fun validateBindDir(dir: String): String? {
     } catch (e: Exception) {
         return "Could not resolve canonical path: ${e.message}"
     }
-    if (BLOCKED_STORAGE_ROOTS.any { canonical.equals(it, ignoreCase = false) || canonical == "$it/" }) {
+    if (BLOCKED_STORAGE_ROOTS.any {
+            canonical.equals(
+                it, ignoreCase = false
+            ) || canonical == "$it/"
+        }) {
         return "Bind directory must be a subfolder, not the storage root ($canonical)"
     }
-    val zone = ALLOWED_ZONES.firstOrNull { canonical.startsWith(it.prefix) } ?: return "Bind directory must be under one of: ${ALLOWED_ZONES.joinToString(", ") { it.prefix }}"
+    val zone = ALLOWED_ZONES.firstOrNull { canonical.startsWith(it.prefix) }
+        ?: return "Bind directory must be under one of: ${ALLOWED_ZONES.joinToString(", ") { it.prefix }}"
     val tail = canonical.removePrefix(zone.prefix).trimEnd('/')
     val segments = if (tail.isEmpty()) emptyList() else tail.split('/')
     if (segments.size < zone.minDepth) {

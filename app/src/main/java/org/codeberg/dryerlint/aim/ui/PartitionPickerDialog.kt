@@ -1,19 +1,19 @@
 /**
-* Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
 package org.codeberg.dryerlint.aim.ui
 
@@ -69,9 +69,15 @@ fun PartitionPickerDialog(
     onSelect: (PartitionEntry) -> Unit,
 ) {
     val infoOnly = partitions.size == 1
-    val savedIndex = initialSelectedIndex?.let { idx -> partitions.indexOfFirst { it.index == idx } }?.takeIf { it >= 0 }
+    val savedIndex =
+        initialSelectedIndex?.let { idx -> partitions.indexOfFirst { it.index == idx } }
+            ?.takeIf { it >= 0 }
     val firstMountable = partitions.indexOfFirst { it.detectedFs != null }
-    var selected by remember { mutableIntStateOf(savedIndex ?: (if (firstMountable >= 0) firstMountable else 0)) }
+    var selected by remember {
+        mutableIntStateOf(
+            savedIndex ?: (if (firstMountable >= 0) firstMountable else 0)
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -80,7 +86,9 @@ fun PartitionPickerDialog(
                 Text(text = "$title (${scheme.name})", style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = pluralStringResource(R.plurals.dialog_partition_description, partitions.size, partitions.size),
+                    text = pluralStringResource(
+                        R.plurals.dialog_partition_description, partitions.size, partitions.size
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -88,7 +96,9 @@ fun PartitionPickerDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                val barTotal = if (totalSizeBytes > 0) totalSizeBytes else partitions.maxOfOrNull { it.offsetBytes + it.sizeBytes } ?: 1L
+                val barTotal =
+                    if (totalSizeBytes > 0) totalSizeBytes else partitions.maxOfOrNull { it.offsetBytes + it.sizeBytes }
+                        ?: 1L
                 DiskBar(partitions = partitions, totalBytes = barTotal)
                 Spacer(modifier = Modifier.height(8.dp))
                 partitions.forEachIndexed { idx, part ->
@@ -97,17 +107,17 @@ fun PartitionPickerDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
-                            .then(
-                                if (!infoOnly && mountable) Modifier.clickable { selected = idx }
-                                else Modifier.alpha(0.45f)
-                            )
+                            .then(if (!infoOnly && mountable) Modifier.clickable { selected = idx }
+                            else Modifier.alpha(0.45f))
                             .padding(vertical = 6.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.Center) {
                             RadioButton(
                                 selected = selected == idx,
-                                onClick = if (!infoOnly && mountable) ({ selected = idx }) else null,
+                                onClick = if (!infoOnly && mountable) ({
+                                    selected = idx
+                                }) else null,
                                 enabled = !infoOnly && mountable,
                             )
                         }
@@ -142,7 +152,8 @@ fun PartitionPickerDialog(
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
-                                val fsLabel = part.detectedFs?.mountType ?: stringResource(R.string.dialog_partition_unsupported)
+                                val fsLabel = part.detectedFs?.mountType
+                                    ?: stringResource(R.string.dialog_partition_unsupported)
                                 Text(
                                     text = fsLabel,
                                     style = MaterialTheme.typography.bodySmall,
@@ -151,7 +162,10 @@ fun PartitionPickerDialog(
                                 )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
-                            val fraction = if (barTotal > 0) (part.sizeBytes.toFloat() / barTotal).coerceIn(0.01f, 1f) else 0.01f
+                            val fraction =
+                                if (barTotal > 0) (part.sizeBytes.toFloat() / barTotal).coerceIn(
+                                    0.01f, 1f
+                                ) else 0.01f
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth(fraction)

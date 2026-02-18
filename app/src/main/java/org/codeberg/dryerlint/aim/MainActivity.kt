@@ -1,21 +1,22 @@
 /**
-* Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
 @file:Suppress("SpellCheckingInspection", "AssignedValueIsNeverRead")
+
 package org.codeberg.dryerlint.aim
 
 import android.annotation.SuppressLint
@@ -71,9 +72,9 @@ import org.codeberg.dryerlint.aim.ui.theme.AimTheme
 import kotlin.coroutines.resume
 
 // here we kinda copy the UI of MSD (https://github.com/chenxiaolong/MSD)
-// in a kotliny way cause its simple enough and i find the UI to be pretty good
+// in a kotliny way cause its simple enough and I find the UI to be pretty good
 // cause this app is basically the reverse of MSD 
-// hopefully mr gunnerson doesnt mind
+// hopefully mr gunnerson doesn't mind
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,8 +86,7 @@ class MainActivity : ComponentActivity() {
             setContent { AimTheme { AimApp() } }
         }
         coordinator.addView(
-            composeView,
-            CoordinatorLayout.LayoutParams(
+            composeView, CoordinatorLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
             )
@@ -110,15 +110,16 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     val envChecked by viewModel.envChecked.collectAsState()
     val images by viewModel.images.collectAsState()
     val alerts by viewModel.alerts.collectAsState()
-    val PartitionState by viewModel.partitionPicker.collectAsState()
+    val partitionState by viewModel.partitionPicker.collectAsState()
     val bindDir by viewModel.bindDir.collectAsState()
     val pkgName = LocalContext.current.packageName
     var dialogImagePath by remember { mutableStateOf<String?>(null) }
     var showBindDirEdit by remember { mutableStateOf(false) }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        uri?.let { viewModel.addImage(it) }
-    }
+    val picker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            uri?.let { viewModel.addImage(it) }
+        }
 
     LaunchedEffect(alerts) {
         // always show the most-recent alert (new notifications replace the old)
@@ -149,7 +150,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
         )
     }
 
-    val ppState = PartitionState
+    val ppState = partitionState
     if (ppState != null) {
         PartitionPickerDialog(
             title = ppState.displayName,
@@ -170,7 +171,11 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
             safExposed = dialogImage.exposeInSAF,
             onSafChange = { expose -> viewModel.toggleImageSafExpose(dialogImage.path, expose) },
             storageExposed = dialogImage.exposeInStorage,
-            onStorageChange = { expose -> viewModel.toggleImageStorageExpose(dialogImage.path, expose) },
+            onStorageChange = { expose ->
+                viewModel.toggleImageStorageExpose(
+                    dialogImage.path, expose
+                )
+            },
             onRemove = {
                 dialogImagePath = null
                 viewModel.removeImage(dialogImage.path)
@@ -187,11 +192,20 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = { TopAppBar( title = { Text(stringResource(R.string.app_name)) }, scrollBehavior = scrollBehavior) },
-        snackbarHost = { }
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection),
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.app_name)) }, scrollBehavior = scrollBehavior
+            )
+        },
+        snackbarHost = { }) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 if (showEnv) {
                     item(key = "cat_env") {
@@ -205,8 +219,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                                     if (envStatus.busyboxPath.isNotBlank()) append(" (${envStatus.busyboxPath})")
                                 },
                                 enabled = canAct,
-                                summaryColor = if (envStatus.rootAvailable && envStatus.busyboxAvailable) 
-                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                summaryColor = if (envStatus.rootAvailable && envStatus.busyboxAvailable) MaterialTheme.colorScheme.onSurfaceVariant
                                 else MaterialTheme.colorScheme.error
                             )
                             PreferenceItem(
@@ -220,17 +233,19 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                 }
                 item(key = "cat_images_header") {
                     PreferenceCategory(title = stringResource(R.string.pref_header_images)) {
-                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 1.dp)
+                        )
                         PreferenceItem(
                             title = stringResource(R.string.pref_add_image_name),
                             summary = stringResource(R.string.pref_add_image_desc),
                             enabled = canAct,
-                            onClick = { picker.launch(arrayOf("application/octet-stream", "*/*")) }
-                        )
+                            onClick = { picker.launch(arrayOf("application/octet-stream", "*/*")) })
                     }
                 }
-                itemsIndexed(items = images, key = { _, img -> "img_${img.path}" })
-                { _, img ->
+                itemsIndexed(items = images, key = { _, img -> "img_${img.path}" }) { _, img ->
                     Spacer(modifier = Modifier.height(4.dp))
                     SwitchPreferenceItem(
                         title = img.displayName,
@@ -238,8 +253,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                         checked = img.enabled,
                         enabled = canAct && envStatus.ready,
                         onCheckedChange = { enabled -> viewModel.toggleImage(img.path, enabled) },
-                        onClick = { dialogImagePath = img.path }
-                    )
+                        onClick = { dialogImagePath = img.path })
                 }
                 val mountedImages = images.filter { it.isMounted }
                 item {
@@ -261,7 +275,8 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                     PreferenceCategory(title = stringResource(R.string.pref_header_active_mounts)) {
                         if (mountedImages.isNotEmpty()) {
                             val mountsSummary = mountedImages.joinToString("\n") { img ->
-                                val stem = img.mountedImage?.mountPoint?.substringAfterLast('/') ?: img.displayName
+                                val stem = img.mountedImage?.mountPoint?.substringAfterLast('/')
+                                    ?: img.displayName
                                 val paths = buildList {
                                     if (img.isExposed) add("content://aim/$stem")
                                     if (img.isStorageExposed) add("$bindDir/$stem")
@@ -287,11 +302,14 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                         title = stringResource(R.string.pref_apply_settings_name),
                         summary = stringResource(R.string.pref_apply_settings_desc),
                         enabled = canAct && envStatus.ready,
-                        onClick = { viewModel.applySettings() }
-                    )
+                        onClick = { viewModel.applySettings() })
                 }
                 item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
                         HorizontalDivider()
                     }
                 }
@@ -302,12 +320,15 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                             summary = bindDir,
                             enabled = canAct,
                             onClick = { showBindDirEdit = true },
-                            onLongClick = { viewModel.setBindDir("/data/media/0/mounts") }
-                        )
+                            onLongClick = { viewModel.setBindDir("/data/media/0/mounts") })
                     }
                 }
                 item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
                         HorizontalDivider()
                     }
                 }
@@ -318,8 +339,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                             title = stringResource(R.string.pref_version_name),
                             summary = versionName,
                             onClick = { uriHandler.openUri("https://codeberg.org/dryerlint/AIM") },
-                            onLongClick = { viewModel.alert(Alert.Info("I do nothing")) }
-                        )
+                            onLongClick = { viewModel.alert(Alert.Info("I do nothing")) })
                     }
                 }
             }

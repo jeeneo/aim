@@ -1,19 +1,19 @@
 /**
-* Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
 package org.codeberg.dryerlint.aim.utils
 
@@ -29,7 +29,8 @@ private val ALLOWED_CHMOD_MODES = setOf("775", "664", "777")
 
 fun buildMountOpts(fsType: FsType, mode: MountMode): String {
     if (fsType.readOnly) return "ro,nosuid,nodev,noexec"
-    val base = if (mode == MountMode.PUBLIC) "rw,nosuid,nodev,noexec,noatime" else "rw,nosuid,nodev,noexec"
+    val base =
+        if (mode == MountMode.PUBLIC) "rw,nosuid,nodev,noexec,noatime" else "rw,nosuid,nodev,noexec"
     return when (fsType) {
         FsType.EXT4 -> base
         FsType.VFAT -> "$base,uid=0,gid=0,fmask=0000,dmask=0000,allow_utime=0022,iocharset=utf8"
@@ -40,11 +41,20 @@ fun buildMountOpts(fsType: FsType, mode: MountMode): String {
 
 private fun checkKernelFs(fsType: String, busyboxBin: String): Boolean {
     val fsArg = enumArg(fsType, ALLOWED_FS_TYPES)
-    if (RootShell.cmd("grep", ShellArg.literal("-qw"), fsArg, pathArg("/proc/filesystems"), busyboxBin = busyboxBin).exitCode == 0) return true
-    Log.d(TAG, "$fsType not in /proc/filesystems, trying modprobe")
-    RootShell.cmd("modprobe", fsArg, suppressErr = true, ignoreError = true)
-    RootShell.cmd("insmod", fsArg, suppressErr = true, ignoreError = true)
-    return RootShell.cmd("grep", ShellArg.literal("-qw"), fsArg, pathArg("/proc/filesystems"), busyboxBin = busyboxBin).exitCode == 0
+    if (RootShell.cmd(
+            "grep",
+            ShellArg.literal("-qw"),
+            fsArg,
+            pathArg("/proc/filesystems"),
+            busyboxBin = busyboxBin
+        ).exitCode == 0
+    ) return true
+    Log.d(TAG, "$fsType not in /proc/filesystems")
+    return false
+
+    // RootShell.cmd("modprobe", fsArg, suppressErr = true, ignoreError = true)
+    // RootShell.cmd("insmod", fsArg, suppressErr = true, ignoreError = true)
+    // return RootShell.cmd("grep", ShellArg.literal("-qw"), fsArg, pathArg("/proc/filesystems"), busyboxBin = busyboxBin).exitCode == 0
 }
 
 // try direct mount, then losetup fallback.
@@ -56,11 +66,13 @@ fun doMount(
     mountOpts: String,
     busyboxBin: String,
     partOffset: Long = 0,
-    partSize: Long = 0,
+    partSize: Long = 0
 ): OpResult {
     val isPartition = partOffset > 0
-    Log.d(TAG, "img=$imagePath, mp=$mountPoint, fs=${fsType.mountType}, opts=$mountOpts" +
-        if (isPartition) ", offset=$partOffset, size=$partSize" else "")
+    Log.d(
+        TAG,
+        "img=$imagePath, mp=$mountPoint, fs=${fsType.mountType}, opts=$mountOpts" + if (isPartition) ", offset=$partOffset, size=$partSize" else ""
+    )
 
     val imgPath = pathArg(imagePath)
     val mp = pathArg(mountPoint)
@@ -73,46 +85,89 @@ fun doMount(
         return OpResult.failure(Exception("Kernel does not support ${fsType.mountType}. The filesystem module may not be available on this device."))
     }
 
-    if (RootShell.cmd("mkdir", ShellArg.literal("-p"), mp).exitCode != 0)
-        return OpResult.failure(Exception("Failed to create mount point"))
+    if (RootShell.cmd("mkdir", ShellArg.literal("-p"), mp).exitCode != 0) return OpResult.failure(
+        Exception("Failed to create mount point")
+    )
 
     // for partitioned images, skip the direct mount (it requires offset) and go straight to losetup
     if (!isPartition) {
         val loopOpts = mountOptsArg("$mountOpts,loop")
-        val direct = RootShell.cmd("mount",
-            ShellArg.literal("-t"), fsArg, ShellArg.literal("-o"), loopOpts,
-            imgPath, mp,
-            busyboxBin = busyboxBin, redirectErr = true)
+        val direct = RootShell.cmd(
+            "mount",
+            ShellArg.literal("-t"),
+            fsArg,
+            ShellArg.literal("-o"),
+            loopOpts,
+            imgPath,
+            mp,
+            busyboxBin = busyboxBin,
+            redirectErr = true
+        )
         Log.d(TAG, "direct: exit=${direct.exitCode}, out=${direct.output}")
         if (direct.exitCode == 0) return OpResult.success("Mounted at $mountPoint")
     }
 
     // fallback: manual losetup (required when mounting a partition inside a disk image)
-    Log.d(TAG, if (isPartition) "using losetup with offset" else "direct failed, falling to losetup")
-    val loopDev = RootShell.cmd("losetup", ShellArg.literal("-f"), busyboxBin = busyboxBin).output.lineSequence().firstOrNull()?.trim() ?: return cleanupAndFail(mountPoint, null, "No free loop device", busyboxBin)
+    Log.d(
+        TAG, if (isPartition) "using losetup with offset" else "direct failed, falling to losetup"
+    )
+    val loopDev = RootShell.cmd(
+        "losetup", ShellArg.literal("-f"), busyboxBin = busyboxBin
+    ).output.lineSequence().firstOrNull()?.trim() ?: return cleanupAndFail(
+        mountPoint, null, "No free loop device", busyboxBin
+    )
     Log.d(TAG, "loop=$loopDev")
     val loopArg = loopDevArg(loopDev)
     loopDev.substringAfterLast("loop", "").toIntOrNull()?.let { idx ->
         if (RootShell.cmd("test", ShellArg.literal("-b"), loopArg).exitCode != 0) {
             Log.d(TAG, "creating block device node for loop$idx")
-            RootShell.cmd("mknod", loopArg, ShellArg.literal("b"), numArg(7), numArg(idx),
-                busyboxBin = busyboxBin, suppressErr = true, ignoreError = true)
+            RootShell.cmd(
+                "mknod",
+                loopArg,
+                ShellArg.literal("b"),
+                numArg(7),
+                numArg(idx),
+                busyboxBin = busyboxBin,
+                suppressErr = true,
+                ignoreError = true
+            )
         }
     }
+
     // losetup with optional offset
     val losetupArgs = buildList {
-        if (isPartition) { add(ShellArg.literal("-o")); add(numArg(partOffset)) }
+        if (isPartition) {
+            add(ShellArg.literal("-o"))
+            add(numArg(partOffset))
+        }
         add(loopArg)
         add(imgPath)
     }
+
     Log.d(TAG, "losetup: dev=$loopDev" + if (isPartition) ", offset=$partOffset" else "")
-    val attach = RootShell.cmd("losetup", *losetupArgs.toTypedArray(), busyboxBin = busyboxBin, redirectErr = true)
+    val attach = RootShell.cmd(
+        "losetup", *losetupArgs.toTypedArray(), busyboxBin = busyboxBin, redirectErr = true
+    )
     Log.d(TAG, "losetup: exit=${attach.exitCode}, out=${attach.output.trim().take(200)}")
-    if (attach.exitCode != 0) return cleanupAndFail(mountPoint, null, "Failed to attach loop device: ${attach.output}", busyboxBin)
+    if (attach.exitCode != 0) return cleanupAndFail(
+        mountPoint, null, "Failed to attach loop device: ${attach.output}", busyboxBin
+    )
     Log.d(TAG, "mount: dev=$loopDev -> $mountPoint, fs=${fsType.mountType}")
-    val mount = RootShell.cmd("mount", ShellArg.literal("-t"), fsArg, ShellArg.literal("-o"), optsArg, loopArg, mp, busyboxBin = busyboxBin, redirectErr = true)
+    val mount = RootShell.cmd(
+        "mount",
+        ShellArg.literal("-t"),
+        fsArg,
+        ShellArg.literal("-o"),
+        optsArg,
+        loopArg,
+        mp,
+        busyboxBin = busyboxBin,
+        redirectErr = true
+    )
     Log.d(TAG, "mount: exit=${mount.exitCode}, out=${mount.output.trim().take(200)}")
-    if (mount.exitCode != 0) return cleanupAndFail(mountPoint, loopDev, "Mount failed: ${mount.output}", busyboxBin)
+    if (mount.exitCode != 0) return cleanupAndFail(
+        mountPoint, loopDev, "Mount failed: ${mount.output}", busyboxBin
+    )
     return OpResult.success("Mounted at $mountPoint" + if (isPartition) " (partition at offset $partOffset)" else " using $loopDev")
 }
 
@@ -121,32 +176,55 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String) {
     Log.d(TAG, "makeAccessible: $mountPoint")
     val mpArg = pathArg(mountPoint)
     val mountsDirArg = pathArg(mountsDir)
-    val parentCtx = RootShell.cmd("ls", ShellArg.literal("-dZ"), mountsDirArg,
+    val parentCtx = RootShell.cmd(
+        "ls",
+        ShellArg.literal("-dZ"),
+        mountsDirArg,
         pipeInto = ShellCmd.of("awk", ShellArg.of("{print \$1}"), busyboxBin = busyboxBin)
-    ).output.trim().takeIf { it.matches(Regex("^[a-zA-Z0-9_:,.]+$")) && ':' in it } ?: "u:object_r:app_data_file:s0"
-    val ctxArg = secontextArg(parentCtx)
-    RootShell.cmd("chmod", ShellArg.literal("-R"), enumArg("777", ALLOWED_CHMOD_MODES), mpArg,
-        chain = ShellCmd.of("chcon", ShellArg.literal("-Rh"), ctxArg, mpArg))
+    ).output.trim().takeIf { it.matches(Regex("^[a-zA-Z0-9_:,.]+$")) && ':' in it }
+        ?: "u:object_r:app_data_file:s0"
+    RootShell.cmd(
+        "chmod",
+        ShellArg.literal("-R"),
+        enumArg("777", ALLOWED_CHMOD_MODES),
+        mpArg,
+        chain = ShellCmd.of("chcon", ShellArg.literal("-Rh"), secontextArg(parentCtx), mpArg)
+    )
 }
 
 // restore ownership (1000:1000) and permissions before unmount
 fun restorePermissions(mountPoint: String, busyboxBin: String) {
     Log.d(TAG, "restorePerms: $mountPoint")
     val mpArg = pathArg(mountPoint)
-    RootShell.cmd("chown", ShellArg.literal("-R"), ShellArg.literal("1000:1000"), mpArg,
-        chain = ShellCmd.chain(
-            ShellCmd.of("find", mpArg, ShellArg.literal("-type"), ShellArg.literal("d"),
-                ShellArg.literal("-exec"), ShellArg.literal("chmod"), enumArg("775", VALID_CHMOD_MODES), ShellArg.literal("{}"), ShellArg.literal("+"),
-                busyboxBin = busyboxBin),
-            ShellCmd.of("find", mpArg, ShellArg.literal("-type"), ShellArg.literal("f"),
-                ShellArg.literal("-exec"), ShellArg.literal("chmod"), enumArg("664", VALID_CHMOD_MODES), ShellArg.literal("{}"), ShellArg.literal("+"),
-                busyboxBin = busyboxBin)
-        ))
+    RootShell.cmd("chown", ShellArg.literal("-R"), ShellArg.literal("1000:1000"), mpArg)
+    listOf(Pair("d", "775"), Pair("f", "664")).forEach { (type, mode) ->
+        RootShell.cmd(
+            "find",
+            mpArg,
+            ShellArg.literal("-type"),
+            ShellArg.literal(type),
+            ShellArg.literal("-exec"),
+            ShellArg.literal("chmod"),
+            enumArg(mode, ALLOWED_CHMOD_MODES),
+            ShellArg.literal("{}"),
+            ShellArg.literal("+"),
+            busyboxBin = busyboxBin
+        )
+    }
 }
 
 fun cleanupAndFail(mp: String, loop: String?, msg: String, busyboxBin: String): OpResult {
     Log.w(TAG, "cleanupAndFail: $msg (loop=$loop, mp=$mp)")
-    loop?.let { dev -> RootShell.cmd("losetup", ShellArg.literal("-d"), loopDevArg(dev), busyboxBin = busyboxBin, suppressErr = true, ignoreError = true) }
+    loop?.let { dev ->
+        RootShell.cmd(
+            "losetup",
+            ShellArg.literal("-d"),
+            loopDevArg(dev),
+            busyboxBin = busyboxBin,
+            suppressErr = true,
+            ignoreError = true
+        )
+    }
     RootShell.cmd("rmdir", pathArg(mp), suppressErr = true, ignoreError = true)
     return OpResult.failure(Exception(msg))
 }

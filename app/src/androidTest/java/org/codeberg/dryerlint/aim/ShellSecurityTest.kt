@@ -1,25 +1,36 @@
 /**
-* Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
 package org.codeberg.dryerlint.aim
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import org.codeberg.dryerlint.aim.utils.*
-import org.junit.Assert.*
+import org.codeberg.dryerlint.aim.utils.RootShell
+import org.codeberg.dryerlint.aim.utils.ShellArg
+import org.codeberg.dryerlint.aim.utils.ShellCmd
+import org.codeberg.dryerlint.aim.utils.enumArg
+import org.codeberg.dryerlint.aim.utils.loopDevArg
+import org.codeberg.dryerlint.aim.utils.mountOptsArg
+import org.codeberg.dryerlint.aim.utils.numArg
+import org.codeberg.dryerlint.aim.utils.pathArg
+import org.codeberg.dryerlint.aim.utils.secontextArg
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -65,7 +76,10 @@ class ShellSecurityTest {
             val arg = ShellArg.of(input)
             assertTrue("Failed to safely quote: $input", arg.quoted.startsWith("'"))
             assertTrue("Failed to safely quote: $input", arg.quoted.endsWith("'"))
-            assertFalse("Shell metacharacter not escaped in: ${arg.quoted}", arg.quoted.contains("\$(") && !arg.quoted.contains("'\$("))
+            assertFalse(
+                "Shell metacharacter not escaped in: ${arg.quoted}",
+                arg.quoted.contains("\$(") && !arg.quoted.contains("'\$(")
+            )
         }
     }
 
@@ -344,7 +358,8 @@ class ShellSecurityTest {
 
     @Test
     fun testShellCmd_of_busyboxPrefix() {
-        val cmd = ShellCmd.of("grep", ShellArg.literal("-F"), busyboxBin = "/data/adb/magisk/busybox")
+        val cmd =
+            ShellCmd.of("grep", ShellArg.literal("-F"), busyboxBin = "/data/adb/magisk/busybox")
         assertTrue("Should contain busybox path", cmd.fragment.contains("busybox"))
         assertTrue("Should contain grep", cmd.fragment.contains("grep"))
     }
@@ -394,7 +409,12 @@ class ShellSecurityTest {
     @Test
     fun testShellCmd_cannotBypassAllowlistViaBusybox() {
         assertThrows(IllegalArgumentException::class.java) {
-            ShellCmd.of("rm", ShellArg.literal("-rf"), ShellArg.of("/"), busyboxBin = "/data/adb/magisk/busybox")
+            ShellCmd.of(
+                "rm",
+                ShellArg.literal("-rf"),
+                ShellArg.of("/"),
+                busyboxBin = "/data/adb/magisk/busybox"
+            )
         }
     }
 

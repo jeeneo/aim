@@ -1,19 +1,19 @@
 /**
-* Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
 package org.codeberg.dryerlint.aim.utils
 
@@ -47,14 +47,21 @@ fun hexProbe(
     baseOffset: Long = 0,
 ): String {
     val totalSkip = baseOffset + skip
-    val ddResult = RootShell.cmd("dd",
+    val ddResult = RootShell.cmd(
+        "dd",
         ShellArg.literal("if=${imgArg.quoted}"),
         ShellArg.literal("bs=1"),
         ShellArg.literal("skip=$totalSkip"),
         ShellArg.literal("count=$count"),
         busyboxBin = busyboxBin,
         suppressErr = true,
-        pipeInto = ShellCmd.of("hexdump", ShellArg.literal("-v"), ShellArg.literal("-e"), ShellArg.of("/1 \"%02x\""), busyboxBin = busyboxBin)
+        pipeInto = ShellCmd.of(
+            "hexdump",
+            ShellArg.literal("-v"),
+            ShellArg.literal("-e"),
+            ShellArg.of("/1 \"%02x\""),
+            busyboxBin = busyboxBin
+        )
     )
     return ddResult.output.trim().lowercase()
 }
@@ -77,48 +84,63 @@ fun identifyUnsupportedFs(probe: (Int, Int) -> String): String? {
     return if (probe(3, 4) == NTFS_OEM_HEX) "NTFS" else null
 }
 
-class PartitionedImageException(val tableInfo: PartitionTableInfo) : Exception("Image contains a partition table")
+class PartitionedImageException(val tableInfo: PartitionTableInfo) :
+    Exception("Image contains a partition table")
 
 // crude detect of a filesystems type for an image via blkid (preferred) or byte fallback.
 // returns null for unsupported/unknown, returns the FsType for raw filesystem images.
 // throws PartitionedImageException if the image is a partitioned disk.
 fun detectFilesystem(imagePath: String, busyboxBin: String): FsType? {
     val imgArg = pathArg(imagePath)
-    fun summarize(out: String, max: Int = 160) = out.replace('\n', ' ').replace(Regex("\\s+"), " ").trim().let { if (it.length <= max) it else it.take(max) + "..."}
+    fun summarize(out: String, max: Int = 160) =
+        out.replace('\n', ' ').replace(Regex("\\s+"), " ").trim()
+            .let { if (it.length <= max) it else it.take(max) + "..." }
     Log.d(TAG, "start for $imagePath")
     val blkidAttempts = mutableListOf<String>()
 
     // blkid attempt 1: system blkid
     run {
-        val r = RootShell.cmd("blkid",
-            ShellArg.literal("-o"), ShellArg.literal("value"),
-            ShellArg.literal("-s"), ShellArg.literal("TYPE"),
-            imgArg, suppressErr = true)
+        val r = RootShell.cmd(
+            "blkid",
+            ShellArg.literal("-o"),
+            ShellArg.literal("value"),
+            ShellArg.literal("-s"),
+            ShellArg.literal("TYPE"),
+            imgArg,
+            suppressErr = true
+        )
         val norm = r.output.trim().lowercase()
         blkidAttempts += "#1: code=${r.exitCode}, type='${summarize(norm)}'"
         Log.d(TAG, "blkid 1 exit=${r.exitCode}, out=${summarize(norm)}")
         if (r.exitCode == 0 && r.output.isNotBlank()) {
             FS_LIST[norm]?.let { return it }
-            Log.w(TAG, "blkid reported unsupported fs '$norm'")
+            Log.w(TAG, "system blkid reported unsupported fs '$norm'")
             return null
         }
     }
 
     // blkid attempt 2: busybox blkid
     if (busyboxBin.isNotEmpty()) {
-        val r = RootShell.cmd("blkid",
-            ShellArg.literal("-o"), ShellArg.literal("value"),
-            ShellArg.literal("-s"), ShellArg.literal("TYPE"),
-            imgArg, busyboxBin = busyboxBin, suppressErr = true)
+        val r = RootShell.cmd(
+            "blkid",
+            ShellArg.literal("-o"),
+            ShellArg.literal("value"),
+            ShellArg.literal("-s"),
+            ShellArg.literal("TYPE"),
+            imgArg,
+            busyboxBin = busyboxBin,
+            suppressErr = true
+        )
         val norm = r.output.trim().lowercase()
         blkidAttempts += "#2: code=${r.exitCode}, type='${summarize(norm)}'"
         Log.d(TAG, "blkid 2 exit=${r.exitCode}, out=${summarize(norm)}")
         if (r.exitCode == 0 && r.output.isNotBlank()) {
             FS_LIST[norm]?.let { return it }
-            Log.w(TAG, "blkid reported unsupported fs '$norm'")
+            Log.w(TAG, "busybox blkid reported unsupported fs '$norm'")
             return null
         }
     }
+
     fun probe(skip: Int, count: Int) = hexProbe(imagePath, skip, count, busyboxBin, imgArg)
 
     val result = detectFsByMagic(::probe)

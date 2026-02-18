@@ -1,19 +1,19 @@
 /**
-* Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
 package org.codeberg.dryerlint.aim
 
@@ -37,6 +37,7 @@ import java.nio.file.Files
 
 class ImageProvider : DocumentsProvider() {
     private val mountsDir by lazy { File(context!!.filesDir, "mounts") }
+
     companion object {
         private const val TAG = "ImageProvider"
         const val AUTHORITY = "org.codeberg.dryerlint.aim.documents"
@@ -59,6 +60,7 @@ class ImageProvider : DocumentsProvider() {
             Document.COLUMN_LAST_MODIFIED,
             Document.COLUMN_FLAGS,
         )
+
         fun notifyRootsChanged(ctx: Context) {
             ctx.contentResolver.notifyChange(
                 DocumentsContract.buildRootsUri(AUTHORITY), null
@@ -76,15 +78,17 @@ class ImageProvider : DocumentsProvider() {
         val safPaths = images.filter { it.exposeInSAF }.map { it.path }.toSet()
         val allLabels = images.associate { it.path to it.diskLabel }
         if (safPaths.isEmpty()) return emptyList()
-        val exposedStems = safPaths.map { generateMountStem(it, allPaths, allLabels[it], allLabels) }.toSet()
+        val exposedStems =
+            safPaths.map { generateMountStem(it, allPaths, allLabels[it], allLabels) }.toSet()
         val prefix = mountsDir.absolutePath
         val result = mutableListOf<File>()
         try {
             val supportedFs = setOf("ext4", "vfat", "exfat")
             File("/proc/mounts").forEachLine { line ->
                 val parts = line.trim().split(Regex("\\s+"))
-                if (parts.size >= 3 && parts[2] in supportedFs && "loop" in parts[0]
-                    && parts[1].startsWith("$prefix/")
+                if (parts.size >= 3 && parts[2] in supportedFs && "loop" in parts[0] && parts[1].startsWith(
+                        "$prefix/"
+                    )
                 ) {
                     val dirName = parts[1].substringAfterLast('/')
                     if (dirName in exposedStems) {
@@ -92,7 +96,8 @@ class ImageProvider : DocumentsProvider() {
                     }
                 }
             }
-        } catch (_: Exception) { /* /proc/mounts unreadable */ }
+        } catch (_: Exception) { /* /proc/mounts unreadable */
+        }
         return result
     }
 
@@ -111,7 +116,7 @@ class ImageProvider : DocumentsProvider() {
         return File(canonical)
     }
 
-    // sanitise a display name supplied by a caller to prevent directory traversal.
+    // sanitize a display name supplied by a caller to prevent directory traversal.
     private fun sanitiseDisplayName(name: String): String {
         val clean = name.replace('/', '_').replace('\u0000', '_').trim()
         if (clean.isBlank() || clean == "." || clean == "..") {
@@ -180,7 +185,7 @@ class ImageProvider : DocumentsProvider() {
                 Root.COLUMN_FLAGS,
                 Root.FLAG_SUPPORTS_CREATE or Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_IS_CHILD,
             )
-            add(Root.COLUMN_ICON, R.mipmap.ic_launcher)
+            add(Root.COLUMN_ICON, R.drawable.aim_logo)
             add(Root.COLUMN_TITLE, "AIM")
             add(Root.COLUMN_SUMMARY, "Mounted images")
             add(Root.COLUMN_DOCUMENT_ID, ROOT_DOC_ID)
@@ -246,7 +251,8 @@ class ImageProvider : DocumentsProvider() {
         val file = requireInsideMount(File(documentId))
         disallowSymlinks(file)
         val osFlags = safModeToOsFlags(mode) or OsConstants.O_NOFOLLOW
-        val rawFd = try { Os.open(file.path, osFlags, 0)
+        val rawFd = try {
+            Os.open(file.path, osFlags, 0)
         } catch (e: ErrnoException) {
             if (e.errno == OsConstants.ELOOP) {
                 logSecurityEvent("Blocked symlink open via O_NOFOLLOW", documentId)
@@ -379,7 +385,8 @@ class ImageProvider : DocumentsProvider() {
         val mimeType = if (file.isDirectory) {
             Document.MIME_TYPE_DIR
         } else {
-            MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "application/octet-stream"
+            MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
+                ?: "application/octet-stream"
         }
         val flags = if (file.canWrite()) {
             Document.FLAG_SUPPORTS_DELETE or Document.FLAG_SUPPORTS_RENAME or if (file.isDirectory) {

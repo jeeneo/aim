@@ -1,19 +1,19 @@
 /**
-* Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
 package org.codeberg.dryerlint.aim.utils
 
@@ -25,10 +25,11 @@ private const val MAX_LABEL_LENGTH = 64
 private val EMPTY_LABELS = setOf("no name", "no_name", "noname", "")
 private val LABEL_STEM_REGEX = Regex("^[A-Za-z0-9_-]+$")
 
-fun isValidLabelStem(label: String): Boolean = label.isNotBlank() && label.length <= MAX_LABEL_LENGTH && LABEL_STEM_REGEX.matches(label)
+fun isValidLabelStem(label: String): Boolean =
+    label.isNotBlank() && label.length <= MAX_LABEL_LENGTH && LABEL_STEM_REGEX.matches(label)
 
 fun labelToMountStem(raw: String?): String? {
-    if (raw.isNullOrBlank()) return null    
+    if (raw.isNullOrBlank()) return null
     val normalized = raw.trim().lowercase().replace(Regex("[_\\s]+"), "")
     if (normalized in EMPTY_LABELS) return null
     val cleaned = raw.trim()
@@ -45,7 +46,9 @@ fun filenameToMountStem(filename: String): String {
     return capped
 }
 
-fun probeLabel(probe: (skip: Int, count: Int) -> String, fsType: FsType, sizeBytes: Long = Long.MAX_VALUE): String? {
+fun probeLabel(
+    probe: (skip: Int, count: Int) -> String, fsType: FsType, sizeBytes: Long = Long.MAX_VALUE
+): String? {
     return try {
         val raw = when (fsType) {
             FsType.EXT4 -> probeExt4Label(probe)
@@ -94,7 +97,8 @@ private fun probeExfatLabel(probe: (Int, Int) -> String, sizeBytes: Long): Strin
         Log.w(TAG, "exFAT: invalid root dir cluster $rootDirCluster")
         return null
     }
-    val rootDirByteOffset = (clusterHeapOffset + (rootDirCluster - 2) * sectorsPerCluster) * bytesPerSector
+    val rootDirByteOffset =
+        (clusterHeapOffset + (rootDirCluster - 2) * sectorsPerCluster) * bytesPerSector
     if (rootDirByteOffset !in 0..<sizeBytes) {
         Log.w(TAG, "exFAT: root dir offset $rootDirByteOffset out of bounds (size=$sizeBytes)")
         return null
@@ -113,12 +117,12 @@ private fun probeExfatLabel(probe: (Int, Int) -> String, sizeBytes: Long): Strin
         val entryType = rootDirHex.substring(entryBase, entryBase + 2).toIntOrNull(16) ?: continue
         if (entryType == 0x00) break  // end of directory
         if (entryType != 0x83) continue  // not a volume label entry
-        val charCount = rootDirHex.substring(entryBase + 2, entryBase + 4).toIntOrNull(16) ?: return null
+        val charCount =
+            rootDirHex.substring(entryBase + 2, entryBase + 4).toIntOrNull(16) ?: return null
         if (charCount == 0 || charCount > 11) return null
         val labelHexStart = entryBase + 4  // byte 2 of entry
         val labelHexEnd = labelHexStart + charCount * 4  // 2 bytes per char = 4 hex chars
         if (labelHexEnd > rootDirHex.length) return null
-
         val labelHex = rootDirHex.substring(labelHexStart, labelHexEnd)
         return decodeHexAsUTF16LE(labelHex)
     }
