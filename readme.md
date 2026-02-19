@@ -22,6 +22,8 @@ It is installed as a normal app and root access is required.
 * Multi partition support
 * Mounting on internal storage and in documents provider
 
+Meant to be the phone equivalent of [MSD](https://github.com/chenxiaolong/MSD)
+
 ## Limitations
 
 * Must have root access and busybox installed

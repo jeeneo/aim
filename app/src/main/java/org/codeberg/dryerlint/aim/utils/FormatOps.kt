@@ -55,10 +55,11 @@ fun formatImage(
     } catch (e: Exception) {
         return OpResult.failure(Exception("Could not resolve image path: ${e.message}"))
     }
-    if (!validatePath(canonical) || !canonical.endsWith(
+    if (!canonical.endsWith(
             ".img", ignoreCase = true
         )
-    ) return OpResult.failure(Exception("Resolved path is not a .img file or contains invalid characters"))
+    ) return OpResult.failure(Exception("Resolved path is not a .img file"))
+    if (!validatePath(canonical)) return OpResult.failure(Exception("Resolved path contains invalid characters"))
     if (FORMAT_ALLOWED_PREFIXES.none { canonical.startsWith(it) }) return OpResult.failure(
         Exception(
             "Image must be under user storage (${FORMAT_ALLOWED_PREFIXES.joinToString(", ")})"
