@@ -90,6 +90,8 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     val mountManager = MountManager(application)
+    private val mountedPartitionIndex = mutableMapOf<String, Int>()
+    private val mountedStem = mutableMapOf<String, String>()
     private val operationsInProgress = AtomicInteger(0)
     private val _canAct = MutableStateFlow(true)
     val canAct: StateFlow<Boolean> = _canAct
@@ -204,10 +206,25 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         val allLabels = imported.associate { it.path to it.diskLabel }
         _images.value = imported.map { img ->
             val stem = generateMountStem(img.path, allPaths, img.diskLabel, allLabels)
+            val activeStem = mountedStem[img.path]
             val mountedEntry = mounted.find { mi ->
                 mi.mountPoint == "$mountsDir/$stem"
-            }
+            } ?: if (activeStem != null && activeStem != stem) {
+                mounted.find { mi -> mi.mountPoint == "$mountsDir/$activeStem" }
+            } else null
             val currentlyMounted = mountedEntry != null
+            if (currentlyMounted) {
+                // keep mountedStem in sync with what is actually mounted
+                val foundStem = mountedEntry!!.mountPoint.removePrefix("$mountsDir/")
+                mountedStem[img.path] = foundStem
+            }
+            if (currentlyMounted && img.selectedPartitionIndex != null) {
+                mountedPartitionIndex.putIfAbsent(img.path, img.selectedPartitionIndex)
+            }
+            if (!currentlyMounted) {
+                mountedPartitionIndex.remove(img.path)
+                mountedStem.remove(img.path)
+            }
             val readOnly = mountedEntry?.fsType?.readOnly == true
             ImageInfo(
                 path = img.path,
@@ -320,13 +337,16 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 val img = current.find { it.path == path }
                 val ui = _images.value.find { it.path == path }
                 if (ui?.isMounted == true && ui.mountedImage != null) {
-                    unmountWithCleanup(ui.mountedImage, stemFor(path, current))
+                    val unmountStem = mountedStem[path] ?: stemFor(path, current)
+                    unmountWithCleanup(ui.mountedImage, unmountStem)
                 } else if (img != null) {
                     // remove bind mount even if not mounted
+                    val cleanupStem = mountedStem[path] ?: stemFor(path, current)
                     withContext(Dispatchers.IO) {
-                        mountManager.removeStorageBind(stemFor(path, current), _bindDir.value)
+                        mountManager.removeStorageBind(cleanupStem, _bindDir.value)
                     }
                 }
+                mountedStem.remove(path)
                 saveImportedImages(current.filter { it.path != path })
                 refreshAndRebuild()
                 alert(Alert.Info("Removed: ${img?.displayName ?: "Image"}"))
@@ -380,10 +400,14 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     ) {
         for (img in snapshot) {
             if (!img.enabled && img.isMounted && img.mountedImage != null) {
-                val err = unmountWithCleanup(img.mountedImage, stemFor(img.path, allImported))
+                val unmountStem = mountedStem[img.path] ?: stemFor(img.path, allImported)
+                val err = unmountWithCleanup(img.mountedImage, unmountStem)
                 if (err != null) {
                     Log.e(TAG, "Unmount failed: ${img.path}")
                     errors += "Unmount ${img.displayName}: $err"
+                } else {
+                    mountedPartitionIndex.remove(img.path)
+                    mountedStem.remove(img.path)
                 }
             }
         }
@@ -399,6 +423,11 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             val imported = allImported.find { it.path == img.path }
             val stem = stemFor(img.path, allImported)
             val result = mountOrPartitionMount(img.path, imported, stem, img.displayName)
+            result.onSuccess {
+                val part = imported?.selectedPartitionIndex
+                if (part != null) mountedPartitionIndex[img.path] = part
+                mountedStem[img.path] = stem
+            }
             result.onFailure { e ->
                 if (e is PartitionedImageException) {
                     if (imported?.hasPartitions != true) {
@@ -426,16 +455,26 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             if (!img.enabled || !img.isMounted || img.mountedImage == null) continue
             val imported = allImported.find { it.path == img.path }
             val wantPublic = imported?.exposeInSAF == true
-            if (wantPublic == img.isExposed) continue
-
-            val stem = stemFor(img.path, allImported)
-            val err = unmountWithCleanup(img.mountedImage, stem)
+            val knownMountedPart = mountedPartitionIndex[img.path]
+            val partitionChanged =
+                img.hasPartitions && imported?.selectedPartitionIndex != null && knownMountedPart != null && knownMountedPart != imported.selectedPartitionIndex
+            if (wantPublic == img.isExposed && !partitionChanged) continue
+            val unmountStem = mountedStem[img.path] ?: stemFor(img.path, allImported)
+            val newStem = stemFor(img.path, allImported)
+            val err = unmountWithCleanup(img.mountedImage, unmountStem)
             if (err != null) {
                 Log.e(TAG, "Remount unmount failed: ${img.path}")
                 errors += "Remount ${img.displayName}: $err"
                 continue
             }
-            val result = mountOrPartitionMount(img.path, imported, stem, img.displayName)
+            mountedPartitionIndex.remove(img.path)
+            mountedStem.remove(img.path)
+            val result = mountOrPartitionMount(img.path, imported, newStem, img.displayName)
+            result.onSuccess {
+                val part = imported?.selectedPartitionIndex
+                if (part != null) mountedPartitionIndex[img.path] = part
+                mountedStem[img.path] = newStem
+            }
             result.onFailure { e ->
                 if (e is PartitionedImageException) {
                     if (imported?.hasPartitions != true) {
@@ -502,11 +541,13 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             withLockedUi {
                 val ui = _images.value.find { it.path == path }
                 if (ui?.isMounted == true && ui.mountedImage != null) {
-                    val err = unmountWithCleanup(ui.mountedImage, stemFor(path))
+                    val unmountStem = mountedStem[path] ?: stemFor(path)
+                    val err = unmountWithCleanup(ui.mountedImage, unmountStem)
                     if (err != null) {
                         alert(Alert.Failure("Unmount before format failed: $err"))
                         return@withLockedUi
                     }
+                    mountedStem.remove(path)
                 }
                 // re-validate path immediately before format to close the TOCTOU window between unmount and format
                 if (!validatePath(path) || !path.trim().endsWith(".img", ignoreCase = true)) {
@@ -549,30 +590,12 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 selectedPartitionIndex = partition.index, diskLabel = partition.label
             )
         }
-        val current = _images.value.find { it.path == picker.imagePath }
-        if (current?.isMounted != true || current.mountedImage == null) {
-            rebuildImageList()
-            alert(Alert.Info("Partition ${partition.index} selected. Press Apply to mount."))
-            return
-        }
-        viewModelScope.launch {
-            withLockedUi {
-                val stem = stemFor(picker.imagePath)
-                unmountWithCleanup(current.mountedImage, stem)
-                val imported = loadImportedImages().find { it.path == picker.imagePath }
-                val r = withContext(Dispatchers.IO) {
-                    mountManager.mountPartition(
-                        picker.imagePath, partition, modeFor(imported), stem
-                    )
-                }
-                refreshAndRebuild(notifySaf = true)
-                alert(
-                    if (r.isSuccess) Alert.Success("Partition ${partition.index} mounted") else Alert.Failure(
-                        "Mount failed: ${r.exceptionOrNull()?.message}"
-                    )
-                )
-            }
-        }
+        rebuildImageList()
+        alert(
+            Alert.Info(
+                "Partition ${partition.index} selected. Press Apply to mount."
+            )
+        )
     }
 
     fun changePartition(path: String) {
