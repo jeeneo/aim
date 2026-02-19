@@ -215,7 +215,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             val currentlyMounted = mountedEntry != null
             if (currentlyMounted) {
                 // keep mountedStem in sync with what is actually mounted
-                val foundStem = mountedEntry!!.mountPoint.removePrefix("$mountsDir/")
+                val foundStem = mountedEntry.mountPoint.removePrefix("$mountsDir/")
                 mountedStem[img.path] = foundStem
             }
             if (currentlyMounted && img.selectedPartitionIndex != null) {
