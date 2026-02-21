@@ -24,8 +24,11 @@
 -keepclassmembers class org.codeberg.dryerlint.aim.utils.PartitionEntry { *; }
 -keepclassmembers class org.codeberg.dryerlint.aim.utils.PartitionTableInfo { *; }
 -keepclassmembers class org.codeberg.dryerlint.aim.utils.ResolvedImage { *; }
+-keepclassmembers class org.codeberg.dryerlint.aim.utils.PartitionedImageException { *; }
 
 -keep class org.codeberg.dryerlint.aim.utils.ShellCmd { *; }
+-keep class org.codeberg.dryerlint.aim.utils.ShellArg { *; }
+-keep class org.codeberg.dryerlint.aim.utils.RootShell { *; }
 
 -assumenosideeffects class android.util.Log {
     public static int d(...);
