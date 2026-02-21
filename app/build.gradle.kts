@@ -1,19 +1,18 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
 
-val localProperties = mutableMapOf<String, String>()
-file("../local.properties").takeIf { it.exists() }?.forEachLine { line ->
-    if (!line.startsWith("#") && "=" in line) {
-        val (key, value) = line.split("=", limit = 2)
-        localProperties[key.trim()] = value.trim()
-    }
+val localProperties = Properties().apply {
+    val propsFile = file("../local.properties")
+    if (propsFile.exists()) propsFile.inputStream().use { load(it) }
 }
-val releaseStoreFile = localProperties["keystore.path"]
-val releaseStorePassword = localProperties["keystore.password"]
-val releaseKeyAlias = localProperties["keystore.alias"]
-val releaseKeyPassword = localProperties["keystore.keyPassword"]
+val releaseStoreFile = localProperties.getProperty("keystore.path")
+val releaseStorePassword = localProperties.getProperty("keystore.password")
+val releaseKeyAlias = localProperties.getProperty("keystore.alias")
+val releaseKeyPassword = localProperties.getProperty("keystore.keyPassword")
 val hasReleaseSigning = listOf(
     releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword
 ).all { !it.isNullOrBlank() }
@@ -25,10 +24,10 @@ android {
     }
     defaultConfig {
         applicationId = "org.codeberg.dryerlint.aim"
-        minSdk = 31
+        minSdk = 30
         targetSdk = 36
-        versionCode = 104
-        versionName = "1.04"
+        versionCode = 105
+        versionName = "1.05"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
