@@ -125,7 +125,9 @@ fun PartitionPickerDialog(
                         Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = part.label ?: "Part ${part.index}",
+                                    text = part.label ?: stringResource(
+                                        R.string.partition_label_part, part.index
+                                    ),
                                     style = MaterialTheme.typography.titleSmall,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
@@ -224,7 +226,9 @@ private fun DiskBar(partitions: List<PartitionEntry>, totalBytes: Long) {
             ) {
                 if (weight > 0.08f) {
                     Text(
-                        text = part.label ?: "P${part.index}",
+                        text = part.label ?: stringResource(
+                            R.string.partition_bar_label, part.index
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onPrimary,
                         maxLines = 1,

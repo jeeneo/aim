@@ -17,6 +17,7 @@
 
 package org.codeberg.dryerlint.aim.utils
 
+import android.content.Context
 import android.util.Log
 import org.codeberg.dryerlint.aim.FsType
 
@@ -90,7 +91,7 @@ class PartitionedImageException(val tableInfo: PartitionTableInfo) :
 // crude detect of a filesystems type for an image via blkid (preferred) or byte fallback.
 // returns null for unsupported/unknown, returns the FsType for raw filesystem images.
 // throws PartitionedImageException if the image is a partitioned disk.
-fun detectFilesystem(imagePath: String, busyboxBin: String): FsType? {
+fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): FsType? {
     val imgArg = pathArg(imagePath)
     fun summarize(out: String, max: Int = 160) =
         out.replace('\n', ' ').replace(Regex("\\s+"), " ").trim()
@@ -150,7 +151,7 @@ fun detectFilesystem(imagePath: String, busyboxBin: String): FsType? {
     val fatSig = probe(510, 2)
     if (fatSig == "55aa") {
         Log.w(TAG, "55AA boot sig found but BPB invalid - partitioned disk image?")
-        probePartitionTable(imagePath, busyboxBin)?.let { table ->
+        probePartitionTable(ctx, imagePath, busyboxBin)?.let { table ->
             throw PartitionedImageException(table)
         }
     }

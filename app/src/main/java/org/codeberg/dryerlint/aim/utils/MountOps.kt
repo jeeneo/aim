@@ -17,10 +17,12 @@
 
 package org.codeberg.dryerlint.aim.utils
 
+import android.content.Context
 import android.util.Log
 import org.codeberg.dryerlint.aim.FsType
 import org.codeberg.dryerlint.aim.MountMode
 import org.codeberg.dryerlint.aim.OpResult
+import org.codeberg.dryerlint.aim.R
 
 private const val TAG = "MountOps"
 
@@ -60,6 +62,7 @@ private fun checkKernelFs(fsType: String, busyboxBin: String): Boolean {
 // try direct mount, then losetup fallback.
 // [partOffset]/[partSize]: when mounting a partition inside a disk image, specify the byte offset and size.
 fun doMount(
+    ctx: Context,
     imagePath: String,
     mountPoint: String,
     fsType: FsType,
@@ -82,11 +85,17 @@ fun doMount(
     // for fs types that may not be built-in, check the kernel module is loaded
     if (!checkKernelFs(fsType.mountType, busyboxBin)) {
         Log.w(TAG, "kernel does not support ${fsType.mountType}")
-        return OpResult.failure(Exception("Kernel does not support ${fsType.mountType}. The filesystem module may not be available on this device."))
+        return OpResult.failure(
+            Exception(
+                ctx.getString(
+                    R.string.error_kernel_no_fs, fsType.mountType
+                )
+            )
+        )
     }
 
     if (RootShell.cmd("mkdir", ShellArg.literal("-p"), mp).exitCode != 0) return OpResult.failure(
-        Exception("Failed to create mount point")
+        Exception(ctx.getString(R.string.error_failed_create_mount_point_dir, mountPoint))
     )
 
     // for partitioned images, skip the direct mount (it requires offset) and go straight to losetup
@@ -114,7 +123,7 @@ fun doMount(
     val loopDev = RootShell.cmd(
         "losetup", ShellArg.literal("-f"), busyboxBin = busyboxBin
     ).output.lineSequence().firstOrNull()?.trim() ?: return cleanupAndFail(
-        mountPoint, null, "No free loop device", busyboxBin
+        mountPoint, null, ctx.getString(R.string.error_no_free_loop), busyboxBin
     )
     Log.d(TAG, "loop=$loopDev")
     val loopArg = loopDevArg(loopDev)
@@ -150,7 +159,10 @@ fun doMount(
     )
     Log.d(TAG, "losetup: exit=${attach.exitCode}, out=${attach.output.trim().take(200)}")
     if (attach.exitCode != 0) return cleanupAndFail(
-        mountPoint, null, "Failed to attach loop device: ${attach.output}", busyboxBin
+        mountPoint,
+        null,
+        ctx.getString(R.string.error_failed_attach_loop, attach.output),
+        busyboxBin
     )
     Log.d(TAG, "mount: dev=$loopDev -> $mountPoint, fs=${fsType.mountType}")
     val mount = RootShell.cmd(
@@ -166,7 +178,10 @@ fun doMount(
     )
     Log.d(TAG, "mount: exit=${mount.exitCode}, out=${mount.output.trim().take(200)}")
     if (mount.exitCode != 0) return cleanupAndFail(
-        mountPoint, loopDev, "Mount failed: ${mount.output}", busyboxBin
+        mountPoint,
+        loopDev,
+        ctx.getString(R.string.error_mount_failed_output, mount.output),
+        busyboxBin
     )
     return OpResult.success("Mounted at $mountPoint" + if (isPartition) " (partition at offset $partOffset)" else " using $loopDev")
 }

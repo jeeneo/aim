@@ -160,14 +160,14 @@ object RootShell {
     ): ShellResult {
         val command = try {
             ShellCmd.of(binary, *args, busyboxBin = busyboxBin)
-        } catch (e: IllegalArgumentException) {
+        } catch (_: IllegalArgumentException) {
             Log.e(TAG, "Blocked execution of non-whitelisted binary: $binary")
             return ShellResult(-1, "Binary not allowed: $binary")
         }
         return cmd(command, pipeInto, chain, orChain, redirectErr, ignoreError, suppressErr)
     }
 
-    internal fun testBusybox(candidateArg: ShellArg): Boolean {
+    internal fun testBusybox(): Boolean {
         val result = exec("which busybox >/dev/null 2>&1")
         return result.isSuccess
     }

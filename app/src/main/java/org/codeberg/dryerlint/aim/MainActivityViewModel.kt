@@ -91,9 +91,14 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         private const val DEFAULT_BIND_DIR = "/data/media/0/mounts"
     }
 
+    private val app: Application = application
     val mountManager = MountManager(application)
     private val mountedPartitionIndex = mutableMapOf<String, Int>()
     private val mountedStem = mutableMapOf<String, String>()
+
+    private data class BindState(val bindDir: String, val directMount: Boolean)
+
+    private val mountedBindState = mutableMapOf<String, BindState>()
     private val operationsInProgress = AtomicInteger(0)
     private val _canAct = MutableStateFlow(true)
     val canAct: StateFlow<Boolean> = _canAct
@@ -120,14 +125,14 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     fun setBindDir(dir: String) {
         val trimmed = dir.trim().trimEnd('/')
         if (trimmed.isBlank()) return
-        val error = validateBindDir(trimmed)
+        val error = validateBindDir(app, trimmed)
         if (error != null) {
             alert(Alert.Failure(error))
             return
         }
         _bindDir.value = trimmed
         settingsPrefs.edit { putString(KEY_BIND_DIR, trimmed) }
-        alert(Alert.Info("Bind directory set to $trimmed"))
+        alert(Alert.Info(app.getString(R.string.alert_bind_dir_set, trimmed)))
     }
 
     init {
@@ -169,10 +174,16 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         mountedImage: MountedImage,
         stem: String,
         bindDir: String? = null,
+        directMount: Boolean = false,
+        imagePath: String? = null,
     ): String? {
+        val oldBind = imagePath?.let { mountedBindState[it] }
+        val effectiveBindDir = oldBind?.bindDir ?: bindDir
+        val effectiveDirectMount = oldBind?.directMount ?: directMount
         withContext(Dispatchers.IO) {
-            mountManager.removeStorageBind(stem, bindDir)
+            mountManager.removeStorageBind(stem, effectiveBindDir, effectiveDirectMount)
         }
+        imagePath?.let { mountedBindState.remove(it) }
         val result = withContext(Dispatchers.IO) { mountManager.unmountImage(mountedImage) }
         return result.exceptionOrNull()?.message
     }
@@ -230,6 +241,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             if (!currentlyMounted) {
                 mountedPartitionIndex.remove(img.path)
                 mountedStem.remove(img.path)
+                mountedBindState.remove(img.path)
             }
             val readOnly = mountedEntry?.fsType?.readOnly == true
             ImageInfo(
@@ -289,7 +301,11 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     _envChecked.value = true
                 } catch (e: Exception) {
                     Log.e(TAG, "Environment check failed", e)
-                    alert(Alert.Failure(e.message ?: "Environment check failed"))
+                    alert(
+                        Alert.Failure(
+                            e.message ?: app.getString(R.string.alert_environment_check_failed)
+                        )
+                    )
                 }
                 refreshAndRebuild()
             }
@@ -309,12 +325,12 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 val path = resolved.path.orEmpty()
                 val name = resolved.displayName ?: File(path).name
                 if (path.isBlank()) {
-                    alert(Alert.Failure("Could not resolve path"))
+                    alert(Alert.Failure(app.getString(R.string.alert_could_not_resolve_path)))
                     return@withLockedUi
                 }
                 val current = loadImportedImages()
                 if (current.any { it.path == path }) {
-                    alert(Alert.Failure("Image already in list"))
+                    alert(Alert.Failure(app.getString(R.string.alert_image_already_in_list)))
                     return@withLockedUi
                 }
                 // probe for partitions
@@ -332,7 +348,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     )
                 )
                 rebuildImageList()
-                alert(Alert.Info("Added: $name"))
+                alert(Alert.Info(app.getString(R.string.alert_image_added, name)))
             }
         }
     }
@@ -346,18 +362,32 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 val bindDir = img?.bindDir ?: _bindDir.value
                 if (ui?.isMounted == true && ui.mountedImage != null) {
                     val unmountStem = mountedStem[path] ?: stemFor(path, current)
-                    unmountWithCleanup(ui.mountedImage, unmountStem, bindDir)
+                    unmountWithCleanup(
+                        ui.mountedImage,
+                        unmountStem,
+                        bindDir,
+                        directMount = img?.bindDir != null,
+                        imagePath = path
+                    )
                 } else if (img != null) {
                     // remove bind mount even if not mounted
                     val cleanupStem = mountedStem[path] ?: stemFor(path, current)
+                    val oldBind = mountedBindState[path]
+                    val effectiveBindDir = oldBind?.bindDir ?: bindDir
+                    val effectiveDirectMount = oldBind?.directMount ?: (img.bindDir != null)
                     withContext(Dispatchers.IO) {
-                        mountManager.removeStorageBind(cleanupStem, bindDir)
+                        mountManager.removeStorageBind(
+                            cleanupStem, effectiveBindDir, effectiveDirectMount
+                        )
                     }
+                    mountedBindState.remove(path)
                 }
                 mountedStem.remove(path)
                 saveImportedImages(current.filter { it.path != path })
                 refreshAndRebuild()
-                alert(Alert.Info("Removed: ${img?.displayName ?: "Image"}"))
+                val displayName =
+                    img?.displayName ?: app.getString(R.string.alert_default_image_name)
+                alert(Alert.Info(app.getString(R.string.alert_image_removed, displayName)))
             }
         }
     }
@@ -386,7 +416,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         val trimmed = bindDir?.trim()?.trimEnd('/')
         val validatedDir = trimmed?.takeIf { it.isNotEmpty() }
         if (validatedDir != null) {
-            val error = validateBindDir(validatedDir)
+            val error = validateBindDir(app, validatedDir)
             if (error != null) {
                 alert(Alert.Failure(error))
                 return
@@ -397,9 +427,9 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             list.map { if (it.path == path) it.copy(bindDir = validatedDir) else it }
         }
         if (validatedDir != null) {
-            alert(Alert.Info("Custom bind directory set for this image"))
+            alert(Alert.Info(app.getString(R.string.alert_custom_bind_dir_set)))
         } else {
-            alert(Alert.Info("Using global bind directory for this image"))
+            alert(Alert.Info(app.getString(R.string.alert_using_default_bind_dir)))
         }
     }
 
@@ -417,7 +447,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
 
                 refreshAndRebuild(notifySaf = true)
                 if (errors.isNotEmpty()) alert(Alert.Failure(errors.joinToString("\n")))
-                else alert(Alert.Success("Settings applied"))
+                else alert(Alert.Success(app.getString(R.string.alert_settings_applied_success)))
             }
         }
     }
@@ -432,10 +462,16 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 val imported = allImported.find { it.path == img.path }
                 val unmountStem = mountedStem[img.path] ?: stemFor(img.path, allImported)
                 val bindDir = imported?.bindDir ?: _bindDir.value
-                val err = unmountWithCleanup(img.mountedImage, unmountStem, bindDir)
+                val err = unmountWithCleanup(
+                    img.mountedImage,
+                    unmountStem,
+                    bindDir,
+                    directMount = imported?.bindDir != null,
+                    imagePath = img.path
+                )
                 if (err != null) {
                     Log.e(TAG, "Unmount failed: ${img.path}")
-                    errors += "Unmount ${img.displayName}: $err"
+                    errors += app.getString(R.string.error_op_unmount, img.displayName, err)
                 } else {
                     mountedPartitionIndex.remove(img.path)
                     mountedStem.remove(img.path)
@@ -471,7 +507,9 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     showPartitionDialog(img.path, img.displayName)
                 } else {
                     Log.e(TAG, "Mount failed: ${img.path}", e)
-                    errors += "Mount ${img.displayName}: ${e.message}"
+                    errors += app.getString(
+                        R.string.error_op_mount, img.displayName, e.message ?: ""
+                    )
                 }
             }
         }
@@ -493,10 +531,16 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             val bindDir = imported?.bindDir ?: _bindDir.value
             val unmountStem = mountedStem[img.path] ?: stemFor(img.path, allImported)
             val newStem = stemFor(img.path, allImported)
-            val err = unmountWithCleanup(img.mountedImage, unmountStem, bindDir)
+            val err = unmountWithCleanup(
+                img.mountedImage,
+                unmountStem,
+                bindDir,
+                directMount = imported?.bindDir != null,
+                imagePath = img.path
+            )
             if (err != null) {
                 Log.e(TAG, "Remount unmount failed: ${img.path}")
-                errors += "Remount ${img.displayName}: $err"
+                errors += app.getString(R.string.error_op_remount, img.displayName, err)
                 continue
             }
             mountedPartitionIndex.remove(img.path)
@@ -519,7 +563,9 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     showPartitionDialog(img.path, img.displayName)
                 } else {
                     Log.e(TAG, "Remount failed: ${img.path}", e)
-                    errors += "Remount ${img.displayName}: ${e.message}"
+                    errors += app.getString(
+                        R.string.error_op_remount, img.displayName, e.message ?: ""
+                    )
                 }
             }
         }
@@ -539,17 +585,38 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             val isMounted = currentMounts.any { it.mountPoint == "${mountManager.mountsDir}/$stem" }
             val wantBind = imported?.exposeInStorage == true && isMounted
             val imageBindDir = imported?.bindDir ?: defaultBindDir
+            val isCustomBindDir = imported?.bindDir != null
             if (wantBind) {
+                val oldBind = mountedBindState[img.path]
+                if (oldBind != null && (oldBind.bindDir != imageBindDir || oldBind.directMount != isCustomBindDir)) {
+                    val oldStem = mountedStem[img.path] ?: stem
+                    withContext(Dispatchers.IO) {
+                        mountManager.removeStorageBind(
+                            oldStem, oldBind.bindDir, oldBind.directMount
+                        )
+                    }
+                    mountedBindState.remove(img.path)
+                }
                 withContext(Dispatchers.IO) {
-                    mountManager.createStorageBind(stem, imageBindDir)
+                    mountManager.createStorageBind(
+                        stem, imageBindDir, directMount = isCustomBindDir
+                    )
+                }.onSuccess {
+                    mountedBindState[img.path] = BindState(imageBindDir, isCustomBindDir)
                 }.onFailure { e ->
                     Log.e(TAG, "Bind create failed: ${img.path}", e)
-                    errors += "Bind ${img.displayName}: ${e.message}"
+                    errors += app.getString(
+                        R.string.error_op_bind, img.displayName, e.message ?: ""
+                    )
                 }
             } else {
+                val oldBind = mountedBindState[img.path]
+                val effectiveBindDir = oldBind?.bindDir ?: imageBindDir
+                val effectiveDirectMount = oldBind?.directMount ?: isCustomBindDir
                 withContext(Dispatchers.IO) {
-                    mountManager.removeStorageBind(stem, imageBindDir)
+                    mountManager.removeStorageBind(stem, effectiveBindDir, effectiveDirectMount)
                 }
+                mountedBindState.remove(img.path)
             }
         }
     }
@@ -577,14 +644,20 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     val unmountStem = mountedStem[path] ?: stemFor(path)
                     val err = unmountWithCleanup(ui.mountedImage, unmountStem)
                     if (err != null) {
-                        alert(Alert.Failure("Unmount before format failed: $err"))
+                        alert(
+                            Alert.Failure(
+                                app.getString(
+                                    R.string.alert_unmount_before_format_failed, err
+                                )
+                            )
+                        )
                         return@withLockedUi
                     }
                     mountedStem.remove(path)
                 }
                 // re-validate path immediately before format to close the TOCTOU window between unmount and format
                 if (!validatePath(path) || !path.trim().endsWith(".img", ignoreCase = true)) {
-                    alert(Alert.Failure("Path failed validation"))
+                    alert(Alert.Failure(app.getString(R.string.alert_path_validation_failed)))
                     return@withLockedUi
                 }
                 val result = withContext(Dispatchers.IO) { mountManager.formatImage(path, fsType) }
@@ -596,7 +669,13 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                             hasPartitions = false, selectedPartitionIndex = null, diskLabel = null
                         )
                     }
-                }.onFailure { e -> alert(Alert.Failure(e.message ?: "Format failed")) }
+                }.onFailure { e ->
+                    alert(
+                        Alert.Failure(
+                            e.message ?: app.getString(R.string.alert_format_failed)
+                        )
+                    )
+                }
                 refreshAndRebuild()
             }
         }
@@ -626,7 +705,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         rebuildImageList()
         alert(
             Alert.Info(
-                "Partition ${partition.index} selected. Press Apply to mount."
+                app.getString(R.string.alert_partition_selected, partition.index)
             )
         )
     }
@@ -652,7 +731,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     val detectedFs = try {
                         withContext(Dispatchers.IO) {
                             org.codeberg.dryerlint.aim.utils.detectFilesystem(
-                                path, ""
+                                app, path, ""
                             )
                         }
                     } catch (_: Exception) {
@@ -662,7 +741,8 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                         index = 1,
                         bootable = false,
                         typeId = 0,
-                        typeName = detectedFs?.mountType ?: "Image",
+                        typeName = detectedFs?.mountType
+                            ?: app.getString(R.string.image_type_image),
                         startLBA = 0L,
                         sizeSectors = if (fileSize > 0) fileSize / 512 else 0L,
                         offsetBytes = 0L,

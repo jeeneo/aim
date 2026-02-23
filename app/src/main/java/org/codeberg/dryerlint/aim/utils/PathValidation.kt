@@ -18,6 +18,8 @@
 package org.codeberg.dryerlint.aim.utils
 
 import android.annotation.SuppressLint
+import android.content.Context
+import org.codeberg.dryerlint.aim.R
 
 private val PATH_FORBIDDEN = charArrayOf(
     '\u0000', '\n', '\r',
@@ -54,33 +56,34 @@ private val BLOCKED_STORAGE_ROOTS = listOf(
     "/mnt/media_rw",
 )
 
-fun validateBindDir(dir: String): String? {
-    if (dir.isBlank()) return "Directory must not be empty"
-    if (!dir.startsWith('/')) return "Directory must be an absolute path"
-    if (!validatePath(dir)) return "Directory contains invalid characters or path traversal"
+fun validateBindDir(ctx: Context, dir: String): String? {
+    if (dir.isBlank()) return ctx.getString(R.string.error_dir_must_not_be_empty)
+    if (!dir.startsWith('/')) return ctx.getString(R.string.error_dir_must_be_absolute)
+    if (!validatePath(dir)) return ctx.getString(R.string.error_dir_invalid_chars)
     val normalised = java.io.File(dir).normalize().path.trimEnd('/')
-    if (normalised.isEmpty()) return "Directory must not be the root filesystem"
+    if (normalised.isEmpty()) return ctx.getString(R.string.error_dir_not_root_fs)
     val canonical = try {
         java.io.File(normalised).canonicalPath
     } catch (e: Exception) {
-        return "Could not resolve canonical path: ${e.message}"
+        return ctx.getString(R.string.error_resolve_canonical, e.message ?: "")
     }
     if (BLOCKED_STORAGE_ROOTS.any {
             canonical.equals(
                 it, ignoreCase = false
             ) || canonical == "$it/"
         }) {
-        return "Bind directory must be a subfolder, not the storage root ($canonical)"
+        return ctx.getString(R.string.error_bind_subfolder_not_root, canonical)
     }
-    val zone = ALLOWED_ZONES.firstOrNull { canonical.startsWith(it.prefix) }
-        ?: return "Bind directory must be under one of: ${ALLOWED_ZONES.joinToString(", ") { it.prefix }}"
+    val zone =
+        ALLOWED_ZONES.firstOrNull { canonical.startsWith(it.prefix) } ?: return ctx.getString(
+            R.string.error_bind_must_be_under, ALLOWED_ZONES.joinToString(", ") { it.prefix })
     val tail = canonical.removePrefix(zone.prefix).trimEnd('/')
     val segments = if (tail.isEmpty()) emptyList() else tail.split('/')
     if (segments.size < zone.minDepth) {
-        return "Bind directory must be a subfolder, not the root of the storage area"
+        return ctx.getString(R.string.error_bind_subfolder_not_area_root)
     }
     if (segments.any { it == "Android" }) {
-        return "Bind directory must not be inside the Android directory"
+        return ctx.getString(R.string.error_bind_not_android_dir)
     }
     return null // valid
 }

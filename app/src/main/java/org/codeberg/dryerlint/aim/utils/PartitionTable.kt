@@ -21,8 +21,10 @@
 
 package org.codeberg.dryerlint.aim.utils
 
+import android.content.Context
 import android.util.Log
 import org.codeberg.dryerlint.aim.FsType
+import org.codeberg.dryerlint.aim.R
 
 private const val TAG = "PartitionTable"
 private val PARTITION_TYPE_NAMES = mapOf(
@@ -82,11 +84,11 @@ data class PartitionEntry(
 
 enum class PartitionScheme { MBR, GPT }
 
-private fun fsDisplayName(fs: FsType): String = when (fs) {
+private fun fsDisplayName(ctx: Context, fs: FsType): String = when (fs) {
     FsType.EXT4 -> "ext4"
     FsType.VFAT -> "FAT"
     FsType.EXFAT -> "exFAT"
-    else -> "Unknown"
+    else -> ctx.getString(R.string.partition_type_unknown)
 }
 
 data class PartitionTableInfo(
@@ -96,7 +98,7 @@ data class PartitionTableInfo(
 )
 
 // check whether an image is a partitioned disk, returns null if not partitioned
-fun probePartitionTable(imagePath: String, busyboxBin: String): PartitionTableInfo? {
+fun probePartitionTable(ctx: Context, imagePath: String, busyboxBin: String): PartitionTableInfo? {
     val imgArg = pathArg(imagePath)
     fun hexAt(skip: Int, count: Int, baseOffset: Long = 0L) =
         hexProbe(imagePath, skip, count, busyboxBin, imgArg, baseOffset)
@@ -113,9 +115,9 @@ fun probePartitionTable(imagePath: String, busyboxBin: String): PartitionTableIn
     // check part scheme
     val isGPT = hexAt(0, 8, GPT_HEADER_OFFSET) == GPT_SIGNATURE_HEX
     val (entries, scheme) = if (isGPT) {
-        parseGPTEntries(::hexAt) ?: return null
+        parseGPTEntries(ctx, ::hexAt) ?: return null
     } else {
-        parseMBREntries(::hexAt) ?: return null
+        parseMBREntries(ctx, ::hexAt) ?: return null
     }
 
     // validate partition boundaries against actual image size
@@ -143,7 +145,7 @@ fun probePartitionTable(imagePath: String, busyboxBin: String): PartitionTableIn
 }
 
 fun probePartitionFilesystems(
-    imagePath: String, partitions: List<PartitionEntry>, busyboxBin: String
+    ctx: Context, imagePath: String, partitions: List<PartitionEntry>, busyboxBin: String
 ): List<PartitionEntry> {
     val imgArg = pathArg(imagePath)
     return partitions.map { part ->
@@ -157,7 +159,7 @@ fun probePartitionFilesystems(
                 ?: part.label
         val label = labelToMountStem(rawLabel)
         if (detected != null) {
-            val refinedTypeName = fsDisplayName(detected)
+            val refinedTypeName = fsDisplayName(ctx, detected)
             Log.d(
                 TAG,
                 "P${part.index}: ${detected.mountType}" + if (label != null) " label='$label'" else ""
@@ -197,6 +199,7 @@ private fun queryImageSize(busyboxBin: String, imgArg: ShellArg): Long {
 
 // parse MBR partition entries from the table at offset 446
 private fun parseMBREntries(
+    ctx: Context,
     hexAt: (skip: Int, count: Int, baseOffset: Long) -> String,
 ): Pair<MutableList<PartitionEntry>, PartitionScheme>? {
     val rawHex = hexAt(446, 64, 0L)
@@ -229,7 +232,9 @@ private fun parseMBREntries(
             Log.w(TAG, "Partition $i: sector values too large, skipping")
             continue
         }
-        val typeName = PARTITION_TYPE_NAMES[typeId] ?: "Unknown (0x${"%02X".format(typeId)})"
+        val typeName = PARTITION_TYPE_NAMES[typeId] ?: ctx.getString(
+            R.string.partition_type_unknown_hex, "%02X".format(typeId)
+        )
         entries += PartitionEntry(
             index = i + 1,
             bootable = status == 0x80,
@@ -247,6 +252,7 @@ private fun parseMBREntries(
 
 // parse GPT partition entries from the header at LBA 1
 private fun parseGPTEntries(
+    ctx: Context,
     hexAt: (skip: Int, count: Int, baseOffset: Long) -> String,
 ): Pair<MutableList<PartitionEntry>, PartitionScheme>? {
     val headerFields = hexAt(72, 16, GPT_HEADER_OFFSET)
@@ -285,7 +291,7 @@ private fun parseGPTEntries(
             Log.w(TAG, "GPT P${i + 1}: sector values too large, skipping")
             continue
         }
-        val guidName = GPT_TYPE_GUIDS[typeGuid] ?: "Unknown"
+        val guidName = GPT_TYPE_GUIDS[typeGuid] ?: ctx.getString(R.string.partition_type_unknown)
         val partName = if (base + entryHexLen <= rawHex.length) parseGPTName(
             rawHex, base + 112, base + entryHexLen
         ) else null

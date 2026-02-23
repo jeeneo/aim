@@ -17,7 +17,9 @@
 
 package org.codeberg.dryerlint.aim.utils
 
+import android.content.Context
 import org.codeberg.dryerlint.aim.EnvironmentStatus
+import org.codeberg.dryerlint.aim.R
 
 private val BUSYBOX_CANDIDATES = listOf(
     "busybox", "/system/bin/busybox", "/system/xbin/busybox",
@@ -26,14 +28,15 @@ private val BUSYBOX_CANDIDATES = listOf(
 )
 
 // check root access and locate busybox, returns (status, busyboxPath)
-fun checkEnv(currentBusybox: String): Pair<EnvironmentStatus, String> {
+fun checkEnv(ctx: Context, currentBusybox: String): Pair<EnvironmentStatus, String> {
     val rootOk = RootShell.cmd("id").let { it.exitCode == 0 && "uid=0" in it.output }
     if (!rootOk) return EnvironmentStatus(
-        rootMessage = "Root access denied", busyboxMessage = "Skipped (no root)"
+        rootMessage = ctx.getString(R.string.env_root_denied),
+        busyboxMessage = ctx.getString(R.string.env_busybox_skipped),
     ) to ""
     val busyboxPath = BUSYBOX_CANDIDATES.firstOrNull { c ->
         val arg = if (c.startsWith("/")) pathArg(c) else ShellArg.of(c)
-        RootShell.testBusybox(arg)
+        RootShell.testBusybox()
     }?.let { c ->
         if (c.startsWith("/")) c
         else RootShell.cmd(
@@ -42,15 +45,15 @@ fun checkEnv(currentBusybox: String): Pair<EnvironmentStatus, String> {
     }
     return if (busyboxPath != null) EnvironmentStatus(
         rootAvailable = true,
-        rootMessage = "Root access granted",
+        rootMessage = ctx.getString(R.string.env_root_granted),
         busyboxAvailable = true,
         busyboxPath = busyboxPath,
-        busyboxMessage = "System busybox found",
+        busyboxMessage = ctx.getString(R.string.env_busybox_system_found),
         ready = true
     ) to busyboxPath
     else EnvironmentStatus(
         rootAvailable = true,
-        rootMessage = "Root access granted",
-        busyboxMessage = "No busybox found"
+        rootMessage = ctx.getString(R.string.env_root_granted),
+        busyboxMessage = ctx.getString(R.string.env_busybox_not_found),
     ) to currentBusybox
 }

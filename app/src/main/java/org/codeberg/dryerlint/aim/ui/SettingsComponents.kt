@@ -224,6 +224,7 @@ fun ImageOptionsDialog(
     isMultipart: Boolean = false,
     bindDir: String? = null,
     onBindDirChange: () -> Unit = {},
+    onBindDirReset: () -> Unit = {},
 ) {
     var confirmFormat by remember { mutableStateOf(false) }
     var selectedFsType by remember { mutableStateOf("ext4") }
@@ -342,9 +343,21 @@ fun ImageOptionsDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable { onBindDirChange() }
+                        .combinedClickable(
+                            onClick = { onBindDirChange() },
+                            onLongClick = {
+                                if (bindDir != null) onBindDirReset()
+                            },
+                        )
                         .padding(horizontal = 8.dp, vertical = 12.dp),
                 )
+                if (bindDir != null) {
+                    Text(
+                        text = stringResource(R.string.dialog_bind_dir_reset_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = stringResource(R.string.dialog_actions_heading),
@@ -396,6 +409,7 @@ fun ImageOptionsDialog(
 @Composable
 fun BindDirDialog(
     currentDir: String,
+    isGlobal: Boolean = true,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
@@ -406,7 +420,10 @@ fun BindDirDialog(
         text = {
             Column {
                 Text(
-                    text = stringResource(R.string.dialog_bind_dir_description),
+                    text = stringResource(
+                        if (isGlobal) R.string.dialog_bind_dir_description_global
+                        else R.string.dialog_bind_dir_description_single
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

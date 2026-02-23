@@ -36,7 +36,8 @@ import java.io.FileNotFoundException
 import java.nio.file.Files
 
 class ImageProvider : DocumentsProvider() {
-    private val mountsDir by lazy { File(context!!.filesDir, "mounts") }
+    private val ctx: Context by lazy { requireContext() }
+    private val mountsDir by lazy { File(ctx.filesDir, "mounts") }
 
     companion object {
         private const val TAG = "ImageProvider"
@@ -73,7 +74,7 @@ class ImageProvider : DocumentsProvider() {
 
     // return the active mount points whose images have SAF exposure enabled
     private fun getSafExposedMounts(): List<File> {
-        val images = ImageStore.loadAll(context!!)
+        val images = ImageStore.loadAll(ctx)
         val allPaths = images.map { it.path }
         val safPaths = images.filter { it.exposeInSAF }.map { it.path }.toSet()
         val allLabels = images.associate { it.path to it.diskLabel }
@@ -186,12 +187,12 @@ class ImageProvider : DocumentsProvider() {
                 Root.FLAG_SUPPORTS_CREATE or Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_IS_CHILD,
             )
             add(Root.COLUMN_ICON, R.drawable.aim_logo)
-            add(Root.COLUMN_TITLE, "AIM")
-            add(Root.COLUMN_SUMMARY, "Mounted images")
+            add(Root.COLUMN_TITLE, ctx.getString(R.string.app_name))
+            add(Root.COLUMN_SUMMARY, ctx.getString(R.string.mounted_images_title))
             add(Root.COLUMN_DOCUMENT_ID, ROOT_DOC_ID)
         }
         result.setNotificationUri(
-            context!!.contentResolver,
+            ctx.contentResolver,
             DocumentsContract.buildRootsUri(AUTHORITY),
         )
         return result
@@ -203,7 +204,7 @@ class ImageProvider : DocumentsProvider() {
         if (documentId == ROOT_DOC_ID) {
             result.newRow().apply {
                 add(Document.COLUMN_DOCUMENT_ID, ROOT_DOC_ID)
-                add(Document.COLUMN_DISPLAY_NAME, "AIM")
+                add(Document.COLUMN_DISPLAY_NAME, ctx.getString(R.string.app_name))
                 add(Document.COLUMN_MIME_TYPE, Document.MIME_TYPE_DIR)
                 add(Document.COLUMN_SIZE, 0L)
                 add(Document.COLUMN_LAST_MODIFIED, 0L)
@@ -228,7 +229,7 @@ class ImageProvider : DocumentsProvider() {
                 addFileRow(result, dir, dir.canonicalPath)
             }
             result.setNotificationUri(
-                context!!.contentResolver,
+                ctx.contentResolver,
                 DocumentsContract.buildChildDocumentsUri(AUTHORITY, ROOT_DOC_ID),
             )
             return result

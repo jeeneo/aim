@@ -142,6 +142,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     if (showBindDirEdit) {
         BindDirDialog(
             currentDir = bindDir,
+            isGlobal = true,
             onDismiss = { showBindDirEdit = false },
             onConfirm = { newDir ->
                 viewModel.setBindDir(newDir)
@@ -193,6 +194,9 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
             onBindDirChange = {
                 showImageBindDirEdit = dialogImage.path
             },
+            onBindDirReset = {
+                viewModel.setImageBindDir(dialogImage.path, null)
+            },
         )
     }
 
@@ -200,6 +204,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
         val imageForDialog = images.firstOrNull { it.path == showImageBindDirEdit }
         BindDirDialog(
             currentDir = imageForDialog?.bindDir ?: bindDir,
+            isGlobal = false,
             onDismiss = { showImageBindDirEdit = null },
             onConfirm = { newDir ->
                 val validatedDir = newDir.trim().trimEnd('/').takeIf { it.isNotEmpty() }
@@ -298,9 +303,12 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                                 val stem = img.mountedImage?.mountPoint?.substringAfterLast('/')
                                     ?: img.displayName
                                 val imageBindDir = img.bindDir ?: bindDir
+                                val isCustomBind = img.bindDir != null
                                 val paths = buildList {
                                     if (img.isExposed) add("content://aim/$stem")
-                                    if (img.isStorageExposed) add("$imageBindDir/$stem")
+                                    if (img.isStorageExposed) {
+                                        add(if (isCustomBind) imageBindDir else "$imageBindDir/$stem")
+                                    }
                                     if (isEmpty()) add("/data/data/$pkgName/mounts/$stem")
                                 }
                                 "${img.displayName} (${paths.joinToString(", ")})"
@@ -356,11 +364,12 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                 item(key = "cat_about") {
                     PreferenceCategory(title = stringResource(R.string.pref_header_about)) {
                         val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                        val doNothingMsg = stringResource(R.string.alert_do_nothing)
                         PreferenceItem(
                             title = stringResource(R.string.pref_version_name),
                             summary = versionName,
                             onClick = { uriHandler.openUri("https://codeberg.org/dryerlint/AIM") },
-                            onLongClick = { viewModel.alert(Alert.Info("I do nothing")) })
+                            onLongClick = { viewModel.alert(Alert.Info(doNothingMsg)) })
                     }
                 }
             }

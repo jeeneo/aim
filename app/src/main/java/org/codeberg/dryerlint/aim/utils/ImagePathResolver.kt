@@ -21,6 +21,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import org.codeberg.dryerlint.aim.R
 import java.io.File
 
 data class ResolvedImage(
@@ -36,7 +37,7 @@ object ImagePathResolver {
             File(path).takeIf { it.exists() }?.let {
                 ResolvedImage(it.absolutePath, name)
             }
-        } ?: ResolvedImage(error = "Cannot resolve path for $name")
+        } ?: ResolvedImage(error = ctx.getString(R.string.error_cannot_resolve_path, name))
     }
 
     // attempts to resolve a SAF URI to browsable path (`/storage/emulated/0` is good enough for most access cases here)
