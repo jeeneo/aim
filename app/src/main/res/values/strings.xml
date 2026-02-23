@@ -38,7 +38,9 @@
     <string name="dialog_cancel">Cancel</string>
     <string name="dialog_save">Save</string>
     <string name="dialog_bind_dir_title">Storage mounts</string>
-    <string name="dialog_bind_dir_description">Path where images are bind-mounted</string>
+    <string name="dialog_bind_dir_description">Path where image(s) are bind-mounted</string>
+    <string name="dialog_bind_dir_custom_name">Custom bind directory</string>
+    <string name="dialog_use_custom_bind">Set custom bind dir</string>
     <plurals name="dialog_partition_description">
         <item quantity="one">This image has %1$d partition.</item>
         <item quantity="other">This image has %1$d partitions.</item>

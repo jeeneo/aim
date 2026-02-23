@@ -164,6 +164,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     }
 
     val dialogImage = images.firstOrNull { it.path == dialogImagePath }
+    var showImageBindDirEdit by remember { mutableStateOf<String?>(null) }
     if (dialogImage != null) {
         ImageOptionsDialog(
             title = dialogImage.displayName,
@@ -188,6 +189,25 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                 viewModel.changePartition(dialogImage.path)
             },
             isMultipart = dialogImage.hasPartitions,
+            bindDir = dialogImage.bindDir,
+            onBindDirChange = {
+                showImageBindDirEdit = dialogImage.path
+            },
+        )
+    }
+
+    if (showImageBindDirEdit != null) {
+        val imageForDialog = images.firstOrNull { it.path == showImageBindDirEdit }
+        BindDirDialog(
+            currentDir = imageForDialog?.bindDir ?: bindDir,
+            onDismiss = { showImageBindDirEdit = null },
+            onConfirm = { newDir ->
+                val validatedDir = newDir.trim().trimEnd('/').takeIf { it.isNotEmpty() }
+                if (validatedDir != imageForDialog?.bindDir) {
+                    viewModel.setImageBindDir(showImageBindDirEdit!!, validatedDir)
+                }
+                showImageBindDirEdit = null
+            },
         )
     }
 
@@ -277,9 +297,10 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                             val mountsSummary = mountedImages.joinToString("\n") { img ->
                                 val stem = img.mountedImage?.mountPoint?.substringAfterLast('/')
                                     ?: img.displayName
+                                val imageBindDir = img.bindDir ?: bindDir
                                 val paths = buildList {
                                     if (img.isExposed) add("content://aim/$stem")
-                                    if (img.isStorageExposed) add("$bindDir/$stem")
+                                    if (img.isStorageExposed) add("$imageBindDir/$stem")
                                     if (isEmpty()) add("/data/data/$pkgName/mounts/$stem")
                                 }
                                 "${img.displayName} (${paths.joinToString(", ")})"

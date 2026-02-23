@@ -321,11 +321,12 @@ class MountManager(appContext: Context) {
     fun formatImage(path: String, fsType: String = "ext4"): OpResult =
         formatImage(path, _envStatus.value.ready, busyboxBin, fsType)
 
-    fun createStorageBind(stem: String, bindDir: String): OpResult {
+    fun createStorageBind(stem: String, bindDir: String? = null): OpResult {
         if (!_envStatus.value.ready) return OpResult.failure(Exception("Environment not ready"))
-        validateBindDir(bindDir)?.let { return OpResult.failure(Exception(it)) }
+        val targetBindDir = bindDir ?: return OpResult.failure(Exception("Bind directory not specified"))
+        validateBindDir(targetBindDir)?.let { return OpResult.failure(Exception(it)) }
         val resolvedBindDir = try {
-            File(bindDir).canonicalPath
+            File(targetBindDir).canonicalPath
         } catch (e: Exception) {
             return OpResult.failure(Exception("Could not resolve bind directory: ${e.message}"))
         }
@@ -333,7 +334,7 @@ class MountManager(appContext: Context) {
             return OpResult.failure(Exception("Resolved bind directory rejected: $it"))
         }
         val verifiedBindDir = try {
-            File(bindDir).canonicalPath
+            File(targetBindDir).canonicalPath
         } catch (_: Exception) {
             return OpResult.failure(Exception("Path changed during validation"))
         }
@@ -387,10 +388,11 @@ class MountManager(appContext: Context) {
     }
 
     // unmount a bind mount at [bindDir]/[stem] and remove the empty directory
-    fun removeStorageBind(stem: String, bindDir: String): OpResult {
-        validateBindDir(bindDir)?.let { return OpResult.failure(Exception(it)) }
+    fun removeStorageBind(stem: String, bindDir: String? = null): OpResult {
+        val targetBindDir = bindDir ?: return OpResult.success("Bind directory not specified, nothing to remove")
+        validateBindDir(targetBindDir)?.let { return OpResult.failure(Exception(it)) }
         val resolvedBindDir = try {
-            File(bindDir).canonicalPath
+            File(targetBindDir).canonicalPath
         } catch (e: Exception) {
             return OpResult.failure(Exception("Could not resolve bind directory: ${e.message}"))
         }
@@ -399,7 +401,7 @@ class MountManager(appContext: Context) {
         }
         // re-resolve to detect path manipulation between validation and use
         val verifiedBindDir = try {
-            File(bindDir).canonicalPath
+            File(targetBindDir).canonicalPath
         } catch (_: Exception) {
             return OpResult.failure(Exception("Path changed during validation"))
         }

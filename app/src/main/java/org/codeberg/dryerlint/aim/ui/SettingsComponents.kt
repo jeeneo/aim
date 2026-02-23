@@ -222,6 +222,8 @@ fun ImageOptionsDialog(
     showFormat: Boolean = true,
     onChangePartition: () -> Unit = {},
     isMultipart: Boolean = false,
+    bindDir: String? = null,
+    onBindDirChange: () -> Unit = {},
 ) {
     var confirmFormat by remember { mutableStateOf(false) }
     var selectedFsType by remember { mutableStateOf("ext4") }
@@ -326,6 +328,23 @@ fun ImageOptionsDialog(
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.dialog_bind_dir_custom_name),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = bindDir ?: stringResource(R.string.dialog_use_custom_bind),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onBindDirChange() }
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = stringResource(R.string.dialog_actions_heading),

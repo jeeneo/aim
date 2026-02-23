@@ -37,6 +37,7 @@ class ImageStore(context: Context) {
         private const val J_PART = "partition"
         private const val J_HAS_PARTS = "hasPartitions"
         private const val J_LABEL = "label"
+        private const val J_BIND_DIR = "bindDir"
         fun loadAll(context: Context): List<ImportedImage> = ImageStore(context).load()
     }
 
@@ -60,6 +61,7 @@ class ImageStore(context: Context) {
                     selectedPartitionIndex = obj.optInt(J_PART, -1).takeIf { it >= 0 },
                     hasPartitions = obj.optBoolean(J_HAS_PARTS, false),
                     diskLabel = obj.optString(J_LABEL, "").takeIf { it.isNotEmpty() },
+                    bindDir = obj.optString(J_BIND_DIR, "").takeIf { it.isNotEmpty() },
                 )
             }
         } catch (e: Exception) {
@@ -79,6 +81,7 @@ class ImageStore(context: Context) {
                 put(J_PART, img.selectedPartitionIndex ?: -1)
                 put(J_HAS_PARTS, img.hasPartitions)
                 img.diskLabel?.let { put(J_LABEL, it) }
+                img.bindDir?.let { put(J_BIND_DIR, it) }
             })
         }
         val stream = atomicFile.startWrite()

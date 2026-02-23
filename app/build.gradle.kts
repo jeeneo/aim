@@ -26,8 +26,8 @@ android {
         applicationId = "org.codeberg.dryerlint.aim"
         minSdk = 30
         targetSdk = 36
-        versionCode = 105
-        versionName = "1.05"
+        versionCode = 106
+        versionName = "1.06"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
@@ -65,8 +65,8 @@ android {
         resources.excludes += listOf("DebugProbesKt.bin", "kotlin-tooling-metadata.json")
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
     buildFeatures {
         buildConfig = true
