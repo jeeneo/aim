@@ -60,7 +60,7 @@ AIM does not use any permissions except that of running commands as root. Which 
 
 ## Other info
 
-ISO file stypes are supported, but the filesystem `ISO9660` is hardly supported on modern kernels, and only will succeed if the ISO is formatted as any of the supported filesystems. The app will however, attempt to mount and will fail if your device does not support it.
+ISO file types are supported, but the filesystem `ISO9660` is hardly supported on modern kernels, and only will succeed if the ISO is formatted as any of the supported filesystems. The app will however, attempt to mount and will fail if your device does not support it.
 
 ## License
 
