@@ -139,14 +139,44 @@ class MountManager(appContext: Context) {
             pathArg("/proc/mounts"),
             ignoreError = true
         )
-        _mountedImages.value = if (r.exitCode != 0 || r.output.isBlank()) emptyList()
-        else r.output.lineSequence().mapNotNull { line ->
-            val p = line.trim().split(Regex("\\s+"))
-            val fs = p.getOrNull(2)?.let { FS_LIST[it] }
-            if (p.size < 3 || fs == null || "loop" !in p[0]) null
-            else MountedImage(p[0], p[1], p[0], fs)
-        }.distinctBy { "${it.mountPoint}|${it.loopDevice}|${it.devicePath}" }
-            .sortedBy { it.mountPoint }.toList()
+        Log.d("MountManager", "refreshMountedImages: grep exit=${r.exitCode}, output blank=${r.output.isBlank()}")
+        Log.d("MountManager", "Filtered /proc/mounts output:\n${r.output}")
+        _mountedImages.value = if (r.exitCode != 0 || r.output.isBlank()) {
+            Log.d("MountManager", "No entries found in /proc/mounts matching $mountsDir/")
+            emptyList()
+        } else {
+            val parsed = r.output.lineSequence().mapNotNull { line ->
+                val p = line.trim().split(Regex("\\s+"))
+                val device = p.getOrNull(0) ?: "null"
+                val mountPoint = p.getOrNull(1) ?: "null"
+                val fsTypeStr = p.getOrNull(2) ?: "null"
+                val fs = p.getOrNull(2)?.let { FS_LIST[it] }
+                when {
+                    p.size < 3 -> {
+                        Log.d("MountManager", "  SKIP: $line | Reason: not enough fields (${p.size} < 3)")
+                        null
+                    }
+                    fs == null -> {
+                        Log.d("MountManager", "  SKIP: $line | Reason: unknown fs type '$fsTypeStr'")
+                        null
+                    }
+                    "loop" !in device -> {
+                        Log.d("MountManager", "  SKIP: $line | Reason: not a loop device (device='$device')")
+                        null
+                    }
+                    else -> {
+                        Log.d("MountManager", "  PARSE: $line | device=$device, mp=$mountPoint, fs=$fsTypeStr")
+                        MountedImage(device, mountPoint, device, fs)
+                    }
+                }
+            }.distinctBy { "${it.mountPoint}|${it.loopDevice}|${it.devicePath}" }
+                .sortedBy { it.mountPoint }.toList()
+            Log.d("MountManager", "Final mounted images count: ${parsed.size}")
+            parsed.forEach { img ->
+                Log.d("MountManager", "  Mounted: ${img.mountPoint} (${img.fsType.mountType})")
+            }
+            parsed
+        }
     }
 
     fun mountImage(

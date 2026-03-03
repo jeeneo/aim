@@ -88,6 +88,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         private val TAG = MainActivityViewModel::class.java.simpleName
         private const val PREFS_SETTINGS = "app_settings"
         private const val KEY_BIND_DIR = "bindmount_dir"
+        private const val KEY_DEBUG_MODE = "debug_mode"
         private const val DEFAULT_BIND_DIR = "/data/media/0/mounts"
     }
 
@@ -122,6 +123,23 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
 
     val bindDir: StateFlow<String> = _bindDir
 
+    private val _debugMode = MutableStateFlow(
+        settingsPrefs.getBoolean(KEY_DEBUG_MODE, false)
+    )
+    val debugMode: StateFlow<Boolean> = _debugMode
+
+    fun toggleDebugMode() {
+        val newValue = !_debugMode.value
+        _debugMode.value = newValue
+        settingsPrefs.edit { putBoolean(KEY_DEBUG_MODE, newValue) }
+        DebugLog.setEnabled(app, newValue)
+        if (newValue) {
+            alert(Alert.Info(app.getString(R.string.alert_debug_mode_enabled)))
+        } else {
+            alert(Alert.Info(app.getString(R.string.alert_debug_mode_disabled)))
+        }
+    }
+
     fun setBindDir(dir: String) {
         val trimmed = dir.trim().trimEnd('/')
         if (trimmed.isBlank()) return
@@ -136,6 +154,9 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     init {
+        if (_debugMode.value) {
+            DebugLog.setEnabled(app, true)
+        }
         checkEnvironment()
     }
 
