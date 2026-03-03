@@ -293,19 +293,26 @@ class MountManager(appContext: Context) {
         mountDirName: String?,
     ): OpResult {
         val imgArg = pathArg(imagePath)
+        Log.d("MountManager", "mountCheckedImage: checking if image already loop-attached: $imagePath")
+        
         // already loop-attached?
-        if (RootShell.cmd(
-                "losetup",
-                ShellArg.literal("-a"),
-                busyboxBin = busyboxBin,
-                suppressErr = true,
-                pipeInto = ShellCmd.of("grep", ShellArg.literal("-F"), imgArg)
-            ).let { it.exitCode == 0 && it.output.isNotBlank() }
-        ) {
+        val losetupResult = RootShell.cmd(
+            "losetup",
+            ShellArg.literal("-a"),
+            busyboxBin = busyboxBin,
+            suppressErr = true,
+            pipeInto = ShellCmd.of("grep", ShellArg.literal("-F"), imgArg)
+        )
+        Log.d("MountManager", "losetup -a output:\n${losetupResult.output}")
+        Log.d("MountManager", "losetup grep result: exitCode=${losetupResult.exitCode}, found match=${losetupResult.exitCode == 0 && losetupResult.output.isNotBlank()}")
+        
+        if (losetupResult.let { it.exitCode == 0 && it.output.isNotBlank() }) {
+            Log.w("MountManager", "Image already mounted: $imagePath")
             refreshMountedImages()
             return OpResult.failure(Exception(ctx.getString(R.string.error_image_already_mounted)))
         }
         val stem = mountDirName ?: filenameToMountStem(imageFile.nameWithoutExtension)
+        Log.d("MountManager", "mountCheckedImage: proceeding with performMount for stem=$stem, fsType=${fsType.mountType}, mode=$mode")
         return performMount(imagePath, stem, fsType, mode)
     }
 
