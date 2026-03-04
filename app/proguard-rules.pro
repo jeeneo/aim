@@ -30,7 +30,18 @@
 -keep class org.codeberg.dryerlint.aim.utils.ShellArg { *; }
 -keep class org.codeberg.dryerlint.aim.utils.RootShell { *; }
 
--assumenosideeffects class android.util.Log {
-    public static int d(...);
+# Keep Timber and any custom Tree implementations in release builds.
+-keep class timber.log.** { *; }
+-keep class ** extends timber.log.Timber$Tree { *; }
+
+# Keep common logging APIs and methods.
+-keep class android.util.Log { *; }
+-keep class java.util.logging.** { *; }
+-keepclassmembers class android.util.Log {
     public static int v(...);
+    public static int d(...);
+    public static int i(...);
+    public static int w(...);
+    public static int e(...);
+    public static int wtf(...);
 }
