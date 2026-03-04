@@ -128,6 +128,15 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     )
     val debugMode: StateFlow<Boolean> = _debugMode
 
+    private fun errorText(
+        throwable: Throwable,
+        fallback: String = app.getString(R.string.alert_environment_check_failed),
+    ): String {
+        return throwable.message?.takeIf { it.isNotBlank() }
+            ?: throwable.javaClass.simpleName.takeIf { it.isNotBlank() }
+            ?: fallback
+    }
+
     fun toggleDebugMode() {
         val newValue = !_debugMode.value
         _debugMode.value = newValue
@@ -206,7 +215,8 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         }
         imagePath?.let { mountedBindState.remove(it) }
         val result = withContext(Dispatchers.IO) { mountManager.unmountImage(mountedImage) }
-        return result.exceptionOrNull()?.message
+        val error = result.exceptionOrNull() ?: return null
+        return errorText(error, app.getString(R.string.error_unmount_failed))
     }
 
     private fun stemFor(
@@ -529,7 +539,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 } else {
                     Log.e(TAG, "Mount failed: ${img.path}", e)
                     errors += app.getString(
-                        R.string.error_op_mount, img.displayName, e.message ?: ""
+                        R.string.error_op_mount, img.displayName, errorText(e)
                     )
                 }
             }
@@ -585,7 +595,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 } else {
                     Log.e(TAG, "Remount failed: ${img.path}", e)
                     errors += app.getString(
-                        R.string.error_op_remount, img.displayName, e.message ?: ""
+                        R.string.error_op_remount, img.displayName, errorText(e)
                     )
                 }
             }
@@ -627,7 +637,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 }.onFailure { e ->
                     Log.e(TAG, "Bind create failed: ${img.path}", e)
                     errors += app.getString(
-                        R.string.error_op_bind, img.displayName, e.message ?: ""
+                        R.string.error_op_bind, img.displayName, errorText(e)
                     )
                 }
             } else {
@@ -693,7 +703,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 }.onFailure { e ->
                     alert(
                         Alert.Failure(
-                            e.message ?: app.getString(R.string.alert_format_failed)
+                            errorText(e, app.getString(R.string.alert_format_failed))
                         )
                     )
                 }

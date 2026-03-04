@@ -28,6 +28,7 @@ private const val TAG = "MountOps"
 
 private val ALLOWED_FS_TYPES = setOf("ext4", "vfat", "exfat", "iso9660")
 private val ALLOWED_CHMOD_MODES = setOf("775", "664", "777")
+private fun detailOrUnknown(output: String): String = output.trim().ifBlank { "no command output" }
 
 fun buildMountOpts(fsType: FsType, mode: MountMode): String {
     if (fsType.readOnly) return "ro,nosuid,nodev,noexec"
@@ -161,7 +162,7 @@ fun doMount(
     if (attach.exitCode != 0) return cleanupAndFail(
         mountPoint,
         null,
-        ctx.getString(R.string.error_failed_attach_loop, attach.output),
+        ctx.getString(R.string.error_failed_attach_loop, detailOrUnknown(attach.output)),
         busyboxBin
     )
     Log.d(TAG, "mount: dev=$loopDev -> $mountPoint, fs=${fsType.mountType}")
@@ -180,7 +181,7 @@ fun doMount(
     if (mount.exitCode != 0) return cleanupAndFail(
         mountPoint,
         loopDev,
-        ctx.getString(R.string.error_mount_failed_output, mount.output),
+        ctx.getString(R.string.error_mount_failed_output, detailOrUnknown(mount.output)),
         busyboxBin
     )
     return OpResult.success("Mounted at $mountPoint" + if (isPartition) " (partition at offset $partOffset)" else " using $loopDev")

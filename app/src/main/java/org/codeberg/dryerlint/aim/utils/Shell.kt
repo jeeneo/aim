@@ -119,6 +119,13 @@ class ShellCmd private constructor(internal val fragment: String) {
 object RootShell {
     private const val TAG = "RootShell"
     private const val MAX_OUTPUT_CHARS = 256_000 // ~256 KB guard against unbounded reads
+    private val SU_PREFIXES = listOf(
+        listOf("su", "--mount-master", "-c"),
+        listOf("su", "-mm", "-c"),
+        listOf("su", "-c"),
+    )
+    @Volatile
+    private var resolvedSuPrefix: List<String>? = null
 
     fun cmd(
         command: ShellCmd,
@@ -172,9 +179,30 @@ object RootShell {
         return result.isSuccess
     }
 
+    private fun startSu(cmdLine: String): Process {
+        resolvedSuPrefix?.let { prefix ->
+            return ProcessBuilder(*(prefix + cmdLine).toTypedArray()).redirectErrorStream(true)
+                .start()
+        }
+
+        for (prefix in SU_PREFIXES) {
+            val probe = runCatching {
+                ProcessBuilder(*(prefix + "id").toTypedArray()).redirectErrorStream(true).start()
+            }.getOrNull() ?: continue
+            val probeOut = probe.inputStream.bufferedReader().use { it.readText() }
+            val probeCode = probe.waitFor()
+            if (probeCode == 0 && probeOut.contains("uid=0")) {
+                resolvedSuPrefix = prefix
+                Log.i(TAG, "Resolved su prefix: ${prefix.joinToString(" ")}")
+                return ProcessBuilder(*(prefix + cmdLine).toTypedArray()).redirectErrorStream(true)
+                    .start()
+            }
+        }
+        return ProcessBuilder("su", "-c", cmdLine).redirectErrorStream(true).start()
+    }
+
     internal fun exec(cmdLine: String): ShellResult = try {
-        val pb = ProcessBuilder("su", "-c", cmdLine).redirectErrorStream(true)
-        val p = pb.start()
+        val p = startSu(cmdLine)
         val output = p.inputStream.bufferedReader().use { reader ->
             val buf = CharArray(8192)
             val sb = StringBuilder()

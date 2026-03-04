@@ -125,7 +125,7 @@ class MountManager(appContext: Context) {
     val envStatus: StateFlow<EnvironmentStatus> = _envStatus.asStateFlow()
 
     fun checkEnvironment(): EnvironmentStatus {
-        val (status, bb) = checkEnv(ctx, busyboxBin)
+        val (status, bb) = checkEnv(ctx)
         busyboxBin = bb
         _envStatus.value = status
         return status
@@ -285,6 +285,52 @@ class MountManager(appContext: Context) {
         return PartitionedImageResult(table, withFs)
     }
 
+    private fun attachedLoopDevicesForImage(imagePath: String): List<String> {
+        val imgArg = pathArg(imagePath)
+        val r = RootShell.cmd(
+            "losetup",
+            ShellArg.literal("-a"),
+            busyboxBin = busyboxBin,
+            suppressErr = true,
+            pipeInto = ShellCmd.of("grep", ShellArg.literal("-F"), imgArg)
+        )
+        if (r.exitCode != 0 || r.output.isBlank()) return emptyList()
+        return r.output.lineSequence().mapNotNull { line ->
+            val dev = line.substringBefore(':').trim()
+            if (dev.matches(Regex("^/dev/(block/)?loop\\d+$"))) dev else null
+        }.distinct().toList()
+    }
+
+    private fun isLoopMounted(loopDevice: String): Boolean {
+        return RootShell.cmd(
+            "grep",
+            ShellArg.literal("-qF"),
+            ShellArg.of("$loopDevice "),
+            pathArg("/proc/mounts"),
+            busyboxBin = busyboxBin
+        ).exitCode == 0
+    }
+
+    private fun detachLoop(loopDevice: String) {
+        RootShell.cmd(
+            "losetup",
+            ShellArg.literal("-d"),
+            loopDevArg(loopDevice),
+            busyboxBin = busyboxBin,
+            suppressErr = true,
+            ignoreError = true
+        )
+    }
+
+    private fun cleanupStaleLoopsForImage(imagePath: String) {
+        attachedLoopDevicesForImage(imagePath).forEach { loop ->
+            if (!isLoopMounted(loop)) {
+                Log.w("MountManager", "Detaching stale loop for image: $loop -> $imagePath")
+                detachLoop(loop)
+            }
+        }
+    }
+
     private fun mountCheckedImage(
         imagePath: String,
         imageFile: File,
@@ -292,24 +338,21 @@ class MountManager(appContext: Context) {
         mode: MountMode,
         mountDirName: String?,
     ): OpResult {
-        val imgArg = pathArg(imagePath)
         Log.d("MountManager", "mountCheckedImage: checking if image already loop-attached: $imagePath")
-        
-        // already loop-attached?
-        val losetupResult = RootShell.cmd(
-            "losetup",
-            ShellArg.literal("-a"),
-            busyboxBin = busyboxBin,
-            suppressErr = true,
-            pipeInto = ShellCmd.of("grep", ShellArg.literal("-F"), imgArg)
-        )
-        Log.d("MountManager", "losetup -a output:\n${losetupResult.output}")
-        Log.d("MountManager", "losetup grep result: exitCode=${losetupResult.exitCode}, found match=${losetupResult.exitCode == 0 && losetupResult.output.isNotBlank()}")
-        
-        if (losetupResult.let { it.exitCode == 0 && it.output.isNotBlank() }) {
-            Log.w("MountManager", "Image already mounted: $imagePath")
-            refreshMountedImages()
-            return OpResult.failure(Exception(ctx.getString(R.string.error_image_already_mounted)))
+
+        val loops = attachedLoopDevicesForImage(imagePath)
+        Log.d("MountManager", "Attached loops for image: ${loops.joinToString(", ").ifBlank { "none" }}")
+        if (loops.isNotEmpty()) {
+            val mountedLoop = loops.firstOrNull { isLoopMounted(it) }
+            if (mountedLoop != null) {
+                Log.w("MountManager", "Image already mounted via loop: $mountedLoop")
+                refreshMountedImages()
+                return OpResult.failure(Exception(ctx.getString(R.string.error_image_already_mounted)))
+            }
+            loops.forEach {
+                Log.w("MountManager", "Stale loop detected; detaching: $it")
+                detachLoop(it)
+            }
         }
         val stem = mountDirName ?: filenameToMountStem(imageFile.nameWithoutExtension)
         Log.d("MountManager", "mountCheckedImage: proceeding with performMount for stem=$stem, fsType=${fsType.mountType}, mode=$mode")
@@ -341,6 +384,17 @@ class MountManager(appContext: Context) {
         }
         val result = doMount(ctx, imagePath, mp, fsType, opts, busyboxBin, partOffset, partSize)
         if (result.isSuccess) {
+            val verify = RootShell.cmd(
+                "grep",
+                ShellArg.literal("-qF"),
+                ShellArg.of(" $mp "),
+                pathArg("/proc/mounts"),
+                busyboxBin = busyboxBin
+            )
+            if (verify.exitCode != 0) {
+                cleanupStaleLoopsForImage(imagePath)
+                return OpResult.failure(Exception(ctx.getString(R.string.error_mount_not_visible)))
+            }
             if (fsType.posixPermissions) makeAccessible(mp, mountsDir, busyboxBin)
             refreshMountedImages()
             ImageProvider.notifyRootsChanged(ctx)

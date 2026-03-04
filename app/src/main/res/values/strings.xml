@@ -146,6 +146,7 @@
     <string name="error_no_free_loop">No free loop device</string>
     <string name="error_failed_attach_loop">Failed to attach loop device: %s</string>
     <string name="error_mount_failed_output">Mount failed: %s</string>
+    <string name="error_mount_not_visible">Mount did not appear in /proc/mounts after success. Your root shell likely uses an isolated mount namespace. Enable global/mount-master namespace in your root manager.</string>
 
     <string name="error_cannot_resolve_path">Cannot resolve path for %s</string>
 </resources>

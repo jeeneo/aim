@@ -27,22 +27,30 @@ private val BUSYBOX_CANDIDATES = listOf(
     "/data/adb/ap/bin/busybox",
 )
 
+private fun resolveBusyboxPath(): String? {
+    BUSYBOX_CANDIDATES.forEach { candidate ->
+        if (candidate.startsWith("/")) {
+            if (RootShell.cmd("test", ShellArg.literal("-x"), pathArg(candidate)).exitCode == 0) {
+                return candidate
+            }
+        } else {
+            val resolved = RootShell.cmd(
+                "command", ShellArg.literal("-v"), ShellArg.of(candidate), suppressErr = true
+            ).output.lineSequence().firstOrNull()?.trim()
+            if (!resolved.isNullOrBlank()) return resolved
+        }
+    }
+    return null
+}
+
 // check root access and locate busybox, returns (status, busyboxPath)
-fun checkEnv(ctx: Context, currentBusybox: String): Pair<EnvironmentStatus, String> {
+fun checkEnv(ctx: Context): Pair<EnvironmentStatus, String> {
     val rootOk = RootShell.cmd("id").let { it.exitCode == 0 && "uid=0" in it.output }
     if (!rootOk) return EnvironmentStatus(
         rootMessage = ctx.getString(R.string.env_root_denied),
         busyboxMessage = ctx.getString(R.string.env_busybox_skipped),
     ) to ""
-    val busyboxPath = BUSYBOX_CANDIDATES.firstOrNull { c ->
-        val arg = if (c.startsWith("/")) pathArg(c) else ShellArg.of(c)
-        RootShell.testBusybox()
-    }?.let { c ->
-        if (c.startsWith("/")) c
-        else RootShell.cmd(
-            "command", ShellArg.literal("-v"), ShellArg.of(c), suppressErr = true
-        ).output.lineSequence().firstOrNull()?.trim().takeIf { !it.isNullOrBlank() } ?: c
-    }
+    val busyboxPath = resolveBusyboxPath()
     return if (busyboxPath != null) EnvironmentStatus(
         rootAvailable = true,
         rootMessage = ctx.getString(R.string.env_root_granted),
@@ -55,5 +63,7 @@ fun checkEnv(ctx: Context, currentBusybox: String): Pair<EnvironmentStatus, Stri
         rootAvailable = true,
         rootMessage = ctx.getString(R.string.env_root_granted),
         busyboxMessage = ctx.getString(R.string.env_busybox_not_found),
-    ) to currentBusybox
+        // BusyBox is optional; we can use toolbox/toybox binaries when available.
+        ready = true
+    ) to ""
 }
