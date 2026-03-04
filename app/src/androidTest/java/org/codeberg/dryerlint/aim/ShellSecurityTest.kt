@@ -122,6 +122,13 @@ class ShellSecurityTest {
     }
 
     @Test
+    fun testPathArg_acceptsParenthesesInPath() {
+        val path = "/storage/emulated/0/Documents/disk (1).img"
+        val arg = pathArg(path)
+        assertTrue(arg.quoted.contains(path))
+    }
+
+    @Test
     fun testPathArg_rejectsPathTraversal() {
         assertThrows(IllegalArgumentException::class.java) {
             pathArg("/data/../etc/passwd")

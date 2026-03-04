@@ -17,6 +17,8 @@
 
 package org.codeberg.dryerlint.aim
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.codeberg.dryerlint.aim.utils.isValidPath
 import org.codeberg.dryerlint.aim.utils.sanitizeStem
@@ -32,6 +34,8 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class PathValidationTest {
+    private val ctx: Context
+        get() = ApplicationProvider.getApplicationContext()
 
     @Test
     fun testIsValidPath_acceptsNormalPaths() {
@@ -148,9 +152,9 @@ class PathValidationTest {
     }
 
     @Test
-    fun testIsValidPath_rejectsParentheses() {
-        assertFalse(isValidPath("/tmp/(subshell)"))
-        assertFalse(isValidPath("/tmp/file(1337)"))
+    fun testIsValidPath_acceptsParenthesesInFilenames() {
+        assertTrue(isValidPath("/tmp/(subshell)"))
+        assertTrue(isValidPath("/tmp/file(1337)"))
     }
 
     @Test
@@ -192,22 +196,22 @@ class PathValidationTest {
 
     @Test
     fun testValidateBindDir_acceptsStorageEmulatedSubfolders() {
-        assertNull(validateBindDir("/storage/emulated/0/DCIM"))
-        assertNull(validateBindDir("/storage/emulated/0/Download"))
-        assertNull(validateBindDir("/storage/emulated/10/Documents"))
+        assertNull(validateBindDir(ctx, "/storage/emulated/0/DCIM"))
+        assertNull(validateBindDir(ctx, "/storage/emulated/0/Download"))
+        assertNull(validateBindDir(ctx, "/storage/emulated/10/Documents"))
     }
 
     @Test
     fun testValidateBindDir_acceptsSdcardSubfolders() {
-        assertNull(validateBindDir("/sdcard/Download"))
-        assertNull(validateBindDir("/sdcard/DCIM"))
-        assertNull(validateBindDir("/sdcard/Music"))
+        assertNull(validateBindDir(ctx, "/sdcard/Download"))
+        assertNull(validateBindDir(ctx, "/sdcard/DCIM"))
+        assertNull(validateBindDir(ctx, "/sdcard/Music"))
     }
 
     @Test
     fun testValidateBindDir_acceptsMediaRwSubfolders() {
-        assertNull(validateBindDir("/mnt/media_rw/1234-5678/folder"))
-        assertNull(validateBindDir("/mnt/media_rw/sdcard/folder"))
+        assertNull(validateBindDir(ctx, "/mnt/media_rw/1234-5678/folder"))
+        assertNull(validateBindDir(ctx, "/mnt/media_rw/sdcard/folder"))
     }
 
     @Test
@@ -217,7 +221,7 @@ class PathValidationTest {
             "/mnt/media_rw/1234-5678",
         )
         for (path in roots) {
-            val result = validateBindDir(path)
+            val result = validateBindDir(ctx, path)
             assertNotNull("Should reject storage root: $path", result)
             assertTrue(result!!.contains("subfolder"))
         }
@@ -236,7 +240,7 @@ class PathValidationTest {
             "/mnt/media_rw/1234-5678/Android/obb",
         )
         for (path in androidPaths) {
-            val result = validateBindDir(path)
+            val result = validateBindDir(ctx, path)
             assertNotNull("Should reject Android path: $path", result)
             assertTrue(result!!.contains("Android"))
         }
@@ -244,9 +248,9 @@ class PathValidationTest {
 
     @Test
     fun testValidateBindDir_acceptsDataMediaSubfolders() {
-        assertNull(validateBindDir("/data/media/0/Download"))
-        assertNull(validateBindDir("/data/media/0/DCIM"))
-        assertNull(validateBindDir("/data/media/999/Documents"))
+        assertNull(validateBindDir(ctx, "/data/media/0/Download"))
+        assertNull(validateBindDir(ctx, "/data/media/0/DCIM"))
+        assertNull(validateBindDir(ctx, "/data/media/999/Documents"))
     }
 
     @Test
@@ -256,7 +260,7 @@ class PathValidationTest {
             "/data/media/999",
         )
         for (path in roots) {
-            val result = validateBindDir(path)
+            val result = validateBindDir(ctx, path)
             assertNotNull("Should reject /data/media root: $path", result)
             assertTrue(result!!.contains("subfolder"))
         }
@@ -274,7 +278,7 @@ class PathValidationTest {
             "/apex/com.android.runtime",
         )
         for (path in systemPaths) {
-            val result = validateBindDir(path)
+            val result = validateBindDir(ctx, path)
             assertNotNull("Should reject system path: $path", result)
             assertTrue(result!!.contains("must be under"))
         }
@@ -288,7 +292,7 @@ class PathValidationTest {
             "/dev/block",
         )
         for (path in pseudoPaths) {
-            val result = validateBindDir(path)
+            val result = validateBindDir(ctx, path)
             assertNotNull("Should reject pseudo-fs path: $path", result)
             assertTrue(result!!.contains("must be under"))
         }
@@ -302,7 +306,7 @@ class PathValidationTest {
             "/data/app/com.example",
         )
         for (path in dataPaths) {
-            val result = validateBindDir(path)
+            val result = validateBindDir(ctx, path)
             assertNotNull("Should reject data path: $path", result)
             assertTrue(result!!.contains("must be under"))
         }
@@ -315,7 +319,7 @@ class PathValidationTest {
             "/bin/sh",
         )
         for (path in rootPaths) {
-            val result = validateBindDir(path)
+            val result = validateBindDir(ctx, path)
             assertNotNull("Should reject root-level path: $path", result)
             assertTrue(result!!.contains("must be under"))
         }
@@ -323,35 +327,35 @@ class PathValidationTest {
 
     @Test
     fun testValidateBindDir_rejectsRelativePath() {
-        val result = validateBindDir("relative/path")
+        val result = validateBindDir(ctx, "relative/path")
         assertNotNull(result)
         assertTrue(result!!.contains("absolute"))
     }
 
     @Test
     fun testValidateBindDir_rejectsEmptyString() {
-        val result = validateBindDir("")
+        val result = validateBindDir(ctx, "")
         assertNotNull(result)
         assertTrue(result!!.contains("empty"))
     }
 
     @Test
     fun testValidateBindDir_rejectsBlankString() {
-        val result = validateBindDir("   ")
+        val result = validateBindDir(ctx, "   ")
         assertNotNull(result)
         assertTrue(result!!.contains("empty"))
     }
 
     @Test
     fun testValidateBindDir_rejectsShellMetacharacters() {
-        val result = validateBindDir("/sdcard/test;injection")
+        val result = validateBindDir(ctx, "/sdcard/test;injection")
         assertNotNull(result)
         assertTrue(result!!.contains("invalid characters"))
     }
 
     @Test
     fun testValidateBindDir_rejectsPathTraversal() {
-        val result = validateBindDir("/storage/emulated/../system")
+        val result = validateBindDir(ctx, "/storage/emulated/../system")
         assertNotNull(result)
     }
 
@@ -365,7 +369,7 @@ class PathValidationTest {
         )
 
         for (path in unauthorizedPaths) {
-            val result = validateBindDir(path)
+            val result = validateBindDir(ctx, path)
             assertNotNull("Should reject unauthorized path: $path", result)
             assertTrue(result!!.contains("must be under"))
         }
@@ -429,7 +433,7 @@ class PathValidationTest {
 
     @Test
     fun testValidateBindDir_handlesCaseSensitivity() {
-        val result = validateBindDir("/SYSTEM/bin")
+        val result = validateBindDir(ctx, "/SYSTEM/bin")
         assertNotNull("Behavior should be defined", result ?: "")
     }
 

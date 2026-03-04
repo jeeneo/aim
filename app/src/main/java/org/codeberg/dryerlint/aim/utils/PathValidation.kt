@@ -23,7 +23,7 @@ import org.codeberg.dryerlint.aim.R
 
 private val PATH_FORBIDDEN = charArrayOf(
     '\u0000', '\n', '\r',
-    '`', '$', '|', ';', '&', '(', ')', '{', '}', '<', '>',
+    '`', '$', '|', ';', '&', '{', '}', '<', '>',
 )
 
 // unicode normalization (NFC/NFD) is intentionally not applied here,
