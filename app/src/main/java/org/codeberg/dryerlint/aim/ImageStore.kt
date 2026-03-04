@@ -18,10 +18,10 @@
 package org.codeberg.dryerlint.aim
 
 import android.content.Context
-import android.util.Log
 import androidx.core.util.AtomicFile
 import org.json.JSONArray
 import org.json.JSONObject
+import timber.log.Timber
 import java.io.File
 
 class ImageStore(context: Context) {
@@ -65,7 +65,7 @@ class ImageStore(context: Context) {
                 )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse image store", e)
+            Timber.tag(TAG).e(e, "Failed to parse image store")
             emptyList()
         }
     }
@@ -90,7 +90,7 @@ class ImageStore(context: Context) {
             atomicFile.finishWrite(stream)
         } catch (e: Exception) {
             atomicFile.failWrite(stream)
-            Log.e(TAG, "Failed to save image store", e)
+            Timber.tag(TAG).e(e, "Failed to save image store")
         }
     }
 }

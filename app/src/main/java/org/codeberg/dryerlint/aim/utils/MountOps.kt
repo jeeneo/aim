@@ -18,11 +18,11 @@
 package org.codeberg.dryerlint.aim.utils
 
 import android.content.Context
-import android.util.Log
 import org.codeberg.dryerlint.aim.FsType
 import org.codeberg.dryerlint.aim.MountMode
 import org.codeberg.dryerlint.aim.OpResult
 import org.codeberg.dryerlint.aim.R
+import timber.log.Timber
 
 private const val TAG = "MountOps"
 
@@ -52,7 +52,7 @@ private fun checkKernelFs(fsType: String, busyboxBin: String): Boolean {
             busyboxBin = busyboxBin
         ).exitCode == 0
     ) return true
-    Log.d(TAG, "$fsType not in /proc/filesystems")
+    Timber.tag(TAG).d("$fsType not in /proc/filesystems")
     return false
 
     // RootShell.cmd("modprobe", fsArg, suppressErr = true, ignoreError = true)
@@ -73,9 +73,9 @@ fun doMount(
     partSize: Long = 0
 ): OpResult {
     val isPartition = partOffset > 0
-    Log.d(
-        TAG,
-        "img=$imagePath, mp=$mountPoint, fs=${fsType.mountType}, opts=$mountOpts" + if (isPartition) ", offset=$partOffset, size=$partSize" else ""
+    Timber.tag(TAG).d(
+        "img=$imagePath, mp=$mountPoint, fs=${fsType.mountType}, opts=$mountOpts" +
+            if (isPartition) ", offset=$partOffset, size=$partSize" else ""
     )
 
     val imgPath = pathArg(imagePath)
@@ -85,7 +85,7 @@ fun doMount(
 
     // for fs types that may not be built-in, check the kernel module is loaded
     if (!checkKernelFs(fsType.mountType, busyboxBin)) {
-        Log.w(TAG, "kernel does not support ${fsType.mountType}")
+        Timber.tag(TAG).w("kernel does not support ${fsType.mountType}")
         return OpResult.failure(
             Exception(
                 ctx.getString(
@@ -113,24 +113,24 @@ fun doMount(
             busyboxBin = busyboxBin,
             redirectErr = true
         )
-        Log.d(TAG, "direct: exit=${direct.exitCode}, out=${direct.output}")
+        Timber.tag(TAG).d("direct: exit=${direct.exitCode}, out=${direct.output}")
         if (direct.exitCode == 0) return OpResult.success("Mounted at $mountPoint")
     }
 
     // fallback: manual losetup (required when mounting a partition inside a disk image)
-    Log.d(
-        TAG, if (isPartition) "using losetup with offset" else "direct failed, falling to losetup"
+    Timber.tag(TAG).d(
+        if (isPartition) "using losetup with offset" else "direct failed, falling to losetup"
     )
     val loopDev = RootShell.cmd(
         "losetup", ShellArg.literal("-f"), busyboxBin = busyboxBin
     ).output.lineSequence().firstOrNull()?.trim() ?: return cleanupAndFail(
         mountPoint, null, ctx.getString(R.string.error_no_free_loop), busyboxBin
     )
-    Log.d(TAG, "loop=$loopDev")
+    Timber.tag(TAG).d("loop=$loopDev")
     val loopArg = loopDevArg(loopDev)
     loopDev.substringAfterLast("loop", "").toIntOrNull()?.let { idx ->
         if (RootShell.cmd("test", ShellArg.literal("-b"), loopArg).exitCode != 0) {
-            Log.d(TAG, "creating block device node for loop$idx")
+            Timber.tag(TAG).d("creating block device node for loop$idx")
             RootShell.cmd(
                 "mknod",
                 loopArg,
@@ -154,18 +154,18 @@ fun doMount(
         add(imgPath)
     }
 
-    Log.d(TAG, "losetup: dev=$loopDev" + if (isPartition) ", offset=$partOffset" else "")
+    Timber.tag(TAG).d("losetup: dev=$loopDev" + if (isPartition) ", offset=$partOffset" else "")
     val attach = RootShell.cmd(
         "losetup", *losetupArgs.toTypedArray(), busyboxBin = busyboxBin, redirectErr = true
     )
-    Log.d(TAG, "losetup: exit=${attach.exitCode}, out=${attach.output.trim().take(200)}")
+    Timber.tag(TAG).d("losetup: exit=${attach.exitCode}, out=${attach.output.trim().take(200)}")
     if (attach.exitCode != 0) return cleanupAndFail(
         mountPoint,
         null,
         ctx.getString(R.string.error_failed_attach_loop, detailOrUnknown(attach.output)),
         busyboxBin
     )
-    Log.d(TAG, "mount: dev=$loopDev -> $mountPoint, fs=${fsType.mountType}")
+    Timber.tag(TAG).d("mount: dev=$loopDev -> $mountPoint, fs=${fsType.mountType}")
     val mount = RootShell.cmd(
         "mount",
         ShellArg.literal("-t"),
@@ -177,7 +177,7 @@ fun doMount(
         busyboxBin = busyboxBin,
         redirectErr = true
     )
-    Log.d(TAG, "mount: exit=${mount.exitCode}, out=${mount.output.trim().take(200)}")
+    Timber.tag(TAG).d("mount: exit=${mount.exitCode}, out=${mount.output.trim().take(200)}")
     if (mount.exitCode != 0) return cleanupAndFail(
         mountPoint,
         loopDev,
@@ -189,7 +189,7 @@ fun doMount(
 
 // chmod/chcon on POSIX mounts so the app process can access files
 fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String) {
-    Log.d(TAG, "makeAccessible: $mountPoint")
+    Timber.tag(TAG).d("makeAccessible: $mountPoint")
     val mpArg = pathArg(mountPoint)
     val mountsDirArg = pathArg(mountsDir)
     val parentCtx = RootShell.cmd(
@@ -210,7 +210,7 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String) {
 
 // restore ownership (1000:1000) and permissions before unmount
 fun restorePermissions(mountPoint: String, busyboxBin: String) {
-    Log.d(TAG, "restorePerms: $mountPoint")
+    Timber.tag(TAG).d("restorePerms: $mountPoint")
     val mpArg = pathArg(mountPoint)
     RootShell.cmd("chown", ShellArg.literal("-R"), ShellArg.literal("1000:1000"), mpArg)
     listOf(Pair("d", "775"), Pair("f", "664")).forEach { (type, mode) ->
@@ -230,7 +230,7 @@ fun restorePermissions(mountPoint: String, busyboxBin: String) {
 }
 
 fun cleanupAndFail(mp: String, loop: String?, msg: String, busyboxBin: String): OpResult {
-    Log.w(TAG, "cleanupAndFail: $msg (loop=$loop, mp=$mp)")
+    Timber.tag(TAG).w("cleanupAndFail: $msg (loop=$loop, mp=$mp)")
     loop?.let { dev ->
         RootShell.cmd(
             "losetup",

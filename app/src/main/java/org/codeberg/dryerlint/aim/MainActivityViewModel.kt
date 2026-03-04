@@ -20,7 +20,6 @@ package org.codeberg.dryerlint.aim
 import android.app.Application
 import android.content.Context
 import android.net.Uri
-import android.util.Log
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -36,6 +35,7 @@ import org.codeberg.dryerlint.aim.utils.PartitionScheme
 import org.codeberg.dryerlint.aim.utils.PartitionedImageException
 import org.codeberg.dryerlint.aim.utils.validateBindDir
 import org.codeberg.dryerlint.aim.utils.validatePath
+import timber.log.Timber
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -294,6 +294,11 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun alert(alert: Alert) {
+        when (alert) {
+            is Alert.Failure -> Timber.tag(TAG).e("Alert: %s", alert.message)
+            is Alert.Success -> Timber.tag(TAG).i("Alert: %s", alert.message)
+            is Alert.Info -> Timber.tag(TAG).i("Alert: %s", alert.message)
+        }
         _alerts.value = listOf(alert)
     }
 
@@ -331,7 +336,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     withContext(Dispatchers.IO) { mountManager.checkEnvironment() }
                     _envChecked.value = true
                 } catch (e: Exception) {
-                    Log.e(TAG, "Environment check failed", e)
+                    Timber.tag(TAG).e(e, "Environment check failed")
                     alert(
                         Alert.Failure(
                             e.message ?: app.getString(R.string.alert_environment_check_failed)
@@ -501,7 +506,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     imagePath = img.path
                 )
                 if (err != null) {
-                    Log.e(TAG, "Unmount failed: ${img.path}")
+                    Timber.tag(TAG).e("Unmount failed: ${img.path}")
                     errors += app.getString(R.string.error_op_unmount, img.displayName, err)
                 } else {
                     mountedPartitionIndex.remove(img.path)
@@ -537,7 +542,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     }
                     showPartitionDialog(img.path, img.displayName)
                 } else {
-                    Log.e(TAG, "Mount failed: ${img.path}", e)
+                    Timber.tag(TAG).e(e, "Mount failed: ${img.path}")
                     errors += app.getString(
                         R.string.error_op_mount, img.displayName, errorText(e)
                     )
@@ -570,7 +575,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 imagePath = img.path
             )
             if (err != null) {
-                Log.e(TAG, "Remount unmount failed: ${img.path}")
+                Timber.tag(TAG).e("Remount unmount failed: ${img.path}")
                 errors += app.getString(R.string.error_op_remount, img.displayName, err)
                 continue
             }
@@ -593,7 +598,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     }
                     showPartitionDialog(img.path, img.displayName)
                 } else {
-                    Log.e(TAG, "Remount failed: ${img.path}", e)
+                    Timber.tag(TAG).e(e, "Remount failed: ${img.path}")
                     errors += app.getString(
                         R.string.error_op_remount, img.displayName, errorText(e)
                     )
@@ -635,7 +640,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 }.onSuccess {
                     mountedBindState[img.path] = BindState(imageBindDir, isCustomBindDir)
                 }.onFailure { e ->
-                    Log.e(TAG, "Bind create failed: ${img.path}", e)
+                    Timber.tag(TAG).e(e, "Bind create failed: ${img.path}")
                     errors += app.getString(
                         R.string.error_op_bind, img.displayName, errorText(e)
                     )

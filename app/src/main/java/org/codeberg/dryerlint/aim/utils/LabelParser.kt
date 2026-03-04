@@ -17,7 +17,7 @@
 
 package org.codeberg.dryerlint.aim.utils
 
-import android.util.Log
+import timber.log.Timber
 import org.codeberg.dryerlint.aim.FsType
 
 private const val TAG = "LabelParser"
@@ -58,7 +58,7 @@ fun probeLabel(
         }
         labelToMountStem(raw)
     } catch (e: Exception) {
-        Log.w(TAG, "Label probe failed for ${fsType.mountType}: ${e.message}")
+        Timber.tag(TAG).w("Label probe failed for ${fsType.mountType}: ${e.message}")
         null
     }
 }
@@ -83,7 +83,7 @@ private fun probeExfatLabel(probe: (Int, Int) -> String, sizeBytes: Long): Strin
     val bpsShift = probe(108, 1).toIntOrNull(16) ?: return null
     val spcShift = probe(109, 1).toIntOrNull(16) ?: return null
     if (bpsShift !in 9..12 || spcShift !in 0..25) {
-        Log.w(TAG, "exFAT: bad shift values bps=$bpsShift spc=$spcShift")
+        Timber.tag(TAG).w("exFAT: bad shift values bps=$bpsShift spc=$spcShift")
         return null
     }
     val bytesPerSector = 1L shl bpsShift
@@ -94,19 +94,19 @@ private fun probeExfatLabel(probe: (Int, Int) -> String, sizeBytes: Long): Strin
     val clusterHeapOffset = parseL3U32Hex(clusterHeapOffsetHex)
     val rootDirCluster = parseL3U32Hex(rootDirClusterHex)
     if (rootDirCluster < 2) {
-        Log.w(TAG, "exFAT: invalid root dir cluster $rootDirCluster")
+        Timber.tag(TAG).w("exFAT: invalid root dir cluster $rootDirCluster")
         return null
     }
     val rootDirByteOffset =
         (clusterHeapOffset + (rootDirCluster - 2) * sectorsPerCluster) * bytesPerSector
     if (rootDirByteOffset !in 0..<sizeBytes) {
-        Log.w(TAG, "exFAT: root dir offset $rootDirByteOffset out of bounds (size=$sizeBytes)")
+        Timber.tag(TAG).w("exFAT: root dir offset $rootDirByteOffset out of bounds (size=$sizeBytes)")
         return null
     }
     val scanBytes = (sizeBytes - rootDirByteOffset).coerceIn(0L, 4096L).toInt()
     if (scanBytes < 32) return null
     if (rootDirByteOffset > Int.MAX_VALUE) {
-        Log.w(TAG, "exFAT: root dir offset too large for probe: $rootDirByteOffset")
+        Timber.tag(TAG).w("exFAT: root dir offset too large for probe: $rootDirByteOffset")
         return null
     }
     val rootDirHex = probe(rootDirByteOffset.toInt(), scanBytes)

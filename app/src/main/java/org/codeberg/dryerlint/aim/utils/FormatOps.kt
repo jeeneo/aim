@@ -19,9 +19,9 @@ package org.codeberg.dryerlint.aim.utils
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.util.Log
 import org.codeberg.dryerlint.aim.OpResult
 import org.codeberg.dryerlint.aim.R
+import timber.log.Timber
 import java.io.File
 import java.nio.file.Files
 
@@ -117,7 +117,7 @@ private fun formatExt4(
     val mkfs = findBinary(busyboxBin, "mke2fs", "mkfs.ext4") ?: return ShellResult(
         -1, ctx.getString(R.string.error_no_mke2fs)
     )
-    Log.d(TAG, "Formatting $canonical as ext4 with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})")
+    Timber.tag(TAG).d("Formatting $canonical as ext4 with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})")
     return if (mkfs.isBusyboxApplet) {
         RootShell.cmd(
             "mkfs.ext4",
@@ -146,7 +146,7 @@ private fun formatExfat(
     val mkfs = findBinary(busyboxBin, "mkfs.exfat", "mkexfatfs") ?: return ShellResult(
         -1, ctx.getString(R.string.error_no_mkexfat)
     )
-    Log.d(TAG, "Formatting $canonical as exfat with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})")
+    Timber.tag(TAG).d("Formatting $canonical as exfat with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})")
     return if (mkfs.isBusyboxApplet) {
         RootShell.cmd("mkfs.exfat", imgArg, busyboxBin = busyboxBin, redirectErr = true)
     } else {

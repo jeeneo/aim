@@ -18,8 +18,8 @@
 package org.codeberg.dryerlint.aim.utils
 
 import android.content.Context
-import android.util.Log
 import org.codeberg.dryerlint.aim.FsType
+import timber.log.Timber
 
 private const val TAG = "FsDetector"
 
@@ -96,7 +96,7 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): FsTyp
     fun summarize(out: String, max: Int = 160) =
         out.replace('\n', ' ').replace(Regex("\\s+"), " ").trim()
             .let { if (it.length <= max) it else it.take(max) + "..." }
-    Log.d(TAG, "start for $imagePath")
+    Timber.tag(TAG).d("start for $imagePath")
     val blkidAttempts = mutableListOf<String>()
 
     // blkid attempt 1: system blkid
@@ -112,10 +112,10 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): FsTyp
         )
         val norm = r.output.trim().lowercase()
         blkidAttempts += "#1: code=${r.exitCode}, type='${summarize(norm)}'"
-        Log.d(TAG, "blkid 1 exit=${r.exitCode}, out=${summarize(norm)}")
+        Timber.tag(TAG).d("blkid 1 exit=${r.exitCode}, out=${summarize(norm)}")
         if (r.exitCode == 0 && r.output.isNotBlank()) {
             FS_LIST[norm]?.let { return it }
-            Log.w(TAG, "system blkid reported unsupported fs '$norm'")
+            Timber.tag(TAG).w("system blkid reported unsupported fs '$norm'")
             return null
         }
     }
@@ -134,10 +134,10 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): FsTyp
         )
         val norm = r.output.trim().lowercase()
         blkidAttempts += "#2: code=${r.exitCode}, type='${summarize(norm)}'"
-        Log.d(TAG, "blkid 2 exit=${r.exitCode}, out=${summarize(norm)}")
+        Timber.tag(TAG).d("blkid 2 exit=${r.exitCode}, out=${summarize(norm)}")
         if (r.exitCode == 0 && r.output.isNotBlank()) {
             FS_LIST[norm]?.let { return it }
-            Log.w(TAG, "busybox blkid reported unsupported fs '$norm'")
+            Timber.tag(TAG).w("busybox blkid reported unsupported fs '$norm'")
             return null
         }
     }
@@ -150,12 +150,12 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): FsTyp
     // detectFsByMagic returns null on 55AA with invalid BPB - check for partition table
     val fatSig = probe(510, 2)
     if (fatSig == "55aa") {
-        Log.w(TAG, "55AA boot sig found but BPB invalid - partitioned disk image?")
+        Timber.tag(TAG).w("55AA boot sig found but BPB invalid - partitioned disk image?")
         probePartitionTable(ctx, imagePath, busyboxBin)?.let { table ->
             throw PartitionedImageException(table)
         }
     }
 
-    Log.w(TAG, "unsupported '$imagePath'. blkid=[${blkidAttempts.joinToString("; ")}]")
+    Timber.tag(TAG).w("unsupported '$imagePath'. blkid=[${blkidAttempts.joinToString("; ")}]")
     return null
 }

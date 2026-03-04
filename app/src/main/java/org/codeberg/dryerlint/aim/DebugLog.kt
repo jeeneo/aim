@@ -19,7 +19,7 @@ package org.codeberg.dryerlint.aim
 
 import android.content.Context
 import android.os.Process
-import android.util.Log
+import timber.log.Timber
 import java.io.File
 import java.time.Instant
 import java.time.ZoneOffset
@@ -29,7 +29,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 object DebugLog {
     private const val TAG = "DebugLog"
 
-    private val enabled = AtomicBoolean(false)
+    private val timberInitialized = AtomicBoolean(false)
+    private val captureEnabled = AtomicBoolean(false)
     private var logcatProcess: java.lang.Process? = null
     private var logFile: File? = null
 
@@ -37,19 +38,25 @@ object DebugLog {
         .ofPattern("yyyy-MM-dd'T'HH_mm_ss'Z'")
         .withZone(ZoneOffset.UTC)
 
-    val isEnabled: Boolean get() = enabled.get()
+    val isEnabled: Boolean get() = captureEnabled.get()
 
     val currentLogFile: File? get() = logFile
 
+    fun initialize() {
+        if (!timberInitialized.compareAndSet(false, true)) return
+        Timber.plant(Timber.DebugTree())
+        Timber.tag(TAG).i("Timber initialized")
+    }
+
     fun setEnabled(context: Context, enable: Boolean) {
-        if (enable == enabled.get()) return
+        if (enable == captureEnabled.get()) return
         if (enable) start(context) else stop()
     }
 
     private fun start(context: Context) {
         val dir = context.getExternalFilesDir(null)
         if (dir == null) {
-            Log.w(TAG, "External files dir unavailable – cannot start logcat capture")
+            Timber.tag(TAG).w("External files dir unavailable, cannot start logcat capture")
             return
         }
         dir.mkdirs()
@@ -66,19 +73,19 @@ object DebugLog {
             )
             pb.redirectErrorStream(true)
             logcatProcess = pb.start()
-            enabled.set(true)
-            Log.i(TAG, "Debug logcat capture started → ${file.absolutePath}")
+            captureEnabled.set(true)
+            Timber.tag(TAG).i("Debug logcat capture started -> %s", file.absolutePath)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start logcat process", e)
+            Timber.tag(TAG).e(e, "Failed to start logcat process")
             logFile = null
         }
     }
 
     private fun stop() {
-        enabled.set(false)
+        captureEnabled.set(false)
         logcatProcess?.destroy()
         logcatProcess = null
-        Log.i(TAG, "Debug logcat capture stopped")
+        Timber.tag(TAG).i("Debug logcat capture stopped")
         logFile = null
     }
 }
