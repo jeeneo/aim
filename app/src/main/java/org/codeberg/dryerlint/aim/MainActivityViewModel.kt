@@ -89,7 +89,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         private const val PREFS_SETTINGS = "app_settings"
         private const val KEY_BIND_DIR = "bindmount_dir"
         private const val KEY_DEBUG_MODE = "debug_mode"
-        private const val DEFAULT_BIND_DIR = "/data/media/0/mounts"
+        private const val DEFAULT_BIND_DIR = "/storage/emulated/0/mounts"
     }
 
     private val app: Application = application

@@ -43,7 +43,7 @@ private data class AllowedZone(val prefix: String, val minDepth: Int)
 private val ALLOWED_ZONES = listOf(
     // only allow bind mounts on these locations "mount path", subdirs needed
     AllowedZone("/storage/emulated/", 2),   // /storage/emulated/{userId}/{subfolder}
-    AllowedZone("/data/media/", 2),         // /data/media/{userId}/{subfolder}
+    AllowedZone("/storage/emulated/0/media/", 2),         // /storage/emulated/0/{userId}/{subfolder}
     AllowedZone("/sdcard/", 1),             // /sdcard/{subfolder}
     AllowedZone("/mnt/media_rw/", 2),       // /mnt/media_rw/{deviceId}/{subfolder}
 )

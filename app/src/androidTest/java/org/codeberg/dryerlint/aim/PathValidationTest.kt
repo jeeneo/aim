@@ -248,8 +248,8 @@ class PathValidationTest {
 
     @Test
     fun testValidateBindDir_acceptsDataMediaSubfolders() {
-        assertNull(validateBindDir(ctx, "/data/media/0/Download"))
-        assertNull(validateBindDir(ctx, "/data/media/0/DCIM"))
+        assertNull(validateBindDir(ctx, "/storage/emulated/0/Download"))
+        assertNull(validateBindDir(ctx, "/storage/emulated/0/DCIM"))
         assertNull(validateBindDir(ctx, "/data/media/999/Documents"))
     }
 
@@ -258,6 +258,7 @@ class PathValidationTest {
         val roots = listOf(
             "/data/media/0",
             "/data/media/999",
+            "/storage/emulated/0",
         )
         for (path in roots) {
             val result = validateBindDir(ctx, path)

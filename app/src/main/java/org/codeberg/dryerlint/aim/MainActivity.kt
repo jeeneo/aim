@@ -349,7 +349,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                             summary = bindDir,
                             enabled = canAct,
                             onClick = { showBindDirEdit = true },
-                            onLongClick = { viewModel.setBindDir("/data/media/0/mounts") })
+                            onLongClick = { viewModel.setBindDir("/storage/emulated/0/mounts") })
                     }
                 }
                 item {
