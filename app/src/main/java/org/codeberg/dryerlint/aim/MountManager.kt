@@ -21,7 +21,7 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import timber.log.Timber
+import org.codeberg.dryerlint.aim.L
 import org.codeberg.dryerlint.aim.utils.FS_LIST
 import org.codeberg.dryerlint.aim.utils.PartitionEntry
 import org.codeberg.dryerlint.aim.utils.PartitionTableInfo
@@ -139,10 +139,10 @@ class MountManager(appContext: Context) {
             pathArg("/proc/mounts"),
             ignoreError = true
         )
-        Timber.tag("MountManager").d("refreshMountedImages: grep exit=${r.exitCode}, output blank=${r.output.isBlank()}")
-        Timber.tag("MountManager").d("Filtered /proc/mounts output:\n${r.output}")
+        L.d("MountManager", "refreshMountedImages: grep exit=${r.exitCode}, output blank=${r.output.isBlank()}")
+        L.d("MountManager", "Filtered /proc/mounts output:\n${r.output}")
         _mountedImages.value = if (r.exitCode != 0 || r.output.isBlank()) {
-            Timber.tag("MountManager").d("No entries found in /proc/mounts matching $mountsDir/")
+            L.d("MountManager", "No entries found in /proc/mounts matching $mountsDir/")
             emptyList()
         } else {
             val parsed = r.output.lineSequence().mapNotNull { line ->
@@ -153,27 +153,27 @@ class MountManager(appContext: Context) {
                 val fs = p.getOrNull(2)?.let { FS_LIST[it] }
                 when {
                     p.size < 3 -> {
-                        Timber.tag("MountManager").d("  SKIP: $line | Reason: not enough fields (${p.size} < 3)")
+                        L.d("MountManager", "  SKIP: $line | Reason: not enough fields (${p.size} < 3)")
                         null
                     }
                     fs == null -> {
-                        Timber.tag("MountManager").d("  SKIP: $line | Reason: unknown fs type '$fsTypeStr'")
+                        L.d("MountManager", "  SKIP: $line | Reason: unknown fs type '$fsTypeStr'")
                         null
                     }
                     "loop" !in device -> {
-                        Timber.tag("MountManager").d("  SKIP: $line | Reason: not a loop device (device='$device')")
+                        L.d("MountManager", "  SKIP: $line | Reason: not a loop device (device='$device')")
                         null
                     }
                     else -> {
-                        Timber.tag("MountManager").d("  PARSE: $line | device=$device, mp=$mountPoint, fs=$fsTypeStr")
+                        L.d("MountManager", "  PARSE: $line | device=$device, mp=$mountPoint, fs=$fsTypeStr")
                         MountedImage(device, mountPoint, device, fs)
                     }
                 }
             }.distinctBy { "${it.mountPoint}|${it.loopDevice}|${it.devicePath}" }
                 .sortedBy { it.mountPoint }.toList()
-            Timber.tag("MountManager").d("Final mounted images count: ${parsed.size}")
+            L.d("MountManager", "Final mounted images count: ${parsed.size}")
             parsed.forEach { img ->
-                Timber.tag("MountManager").d("  Mounted: ${img.mountPoint} (${img.fsType.mountType})")
+                L.d("MountManager", "  Mounted: ${img.mountPoint} (${img.fsType.mountType})")
             }
             parsed
         }
@@ -225,17 +225,17 @@ class MountManager(appContext: Context) {
         val fsType: FsType
         try {
             fsType = detectFilesystem(ctx, imagePath, busyboxBin) ?: run {
-                Timber.tag("MountManager").w("fs detection failed for $imagePath (${imageFile.length()} bytes)")
+                L.w("MountManager", "fs detection failed for $imagePath (${imageFile.length()} bytes)")
                 return OpResult.failure(Exception(ctx.getString(R.string.error_unsupported_filesystem)))
             }
         } catch (e: PartitionedImageException) {
-            Timber.tag("MountManager").d("Partitioned image detected for $imagePath")
+            L.d("MountManager", "Partitioned image detected for $imagePath")
             val withFs =
                 probePartitionFilesystems(ctx, imagePath, e.tableInfo.partitions, busyboxBin)
             _pendingPartitionResult = PartitionedImageResult(e.tableInfo, withFs)
             return OpResult.failure(e)
         }
-        Timber.tag("MountManager").d("Detected: ${fsType.mountType} for $imagePath")
+        L.d("MountManager", "Detected: ${fsType.mountType} for $imagePath")
         return mountCheckedImage(imagePath, imageFile, fsType, mode, mountDirName)
     }
 
@@ -322,7 +322,7 @@ class MountManager(appContext: Context) {
     private fun cleanupStaleLoopsForImage(imagePath: String) {
         attachedLoopDevicesForImage(imagePath).forEach { loop ->
             if (!isLoopMounted(loop)) {
-                Timber.tag("MountManager").w("Detaching stale loop for image: $loop -> $imagePath")
+                L.w("MountManager", "Detaching stale loop for image: $loop -> $imagePath")
                 detachLoop(loop)
             }
         }
@@ -335,26 +335,24 @@ class MountManager(appContext: Context) {
         mode: MountMode,
         mountDirName: String?,
     ): OpResult {
-        Timber.tag("MountManager").d("mountCheckedImage: checking if image already loop-attached: $imagePath")
+        L.d("MountManager", "mountCheckedImage: checking if image already loop-attached: $imagePath")
 
         val loops = attachedLoopDevicesForImage(imagePath)
-        Timber.tag("MountManager").d(
-            "Attached loops for image: ${loops.joinToString(", ").ifBlank { "none" }}"
-        )
+        L.d("MountManager", "Attached loops for image: ${loops.joinToString(", ").ifBlank { "none" }}")
         if (loops.isNotEmpty()) {
             val mountedLoop = loops.firstOrNull { isLoopMounted(it) }
             if (mountedLoop != null) {
-                Timber.tag("MountManager").w("Image already mounted via loop: $mountedLoop")
+                L.w("MountManager", "Image already mounted via loop: $mountedLoop")
                 refreshMountedImages()
                 return OpResult.failure(Exception(ctx.getString(R.string.error_image_already_mounted)))
             }
             loops.forEach {
-                Timber.tag("MountManager").w("Stale loop detected; detaching: $it")
+                L.w("MountManager", "Stale loop detected; detaching: $it")
                 detachLoop(it)
             }
         }
         val stem = mountDirName ?: filenameToMountStem(imageFile.nameWithoutExtension)
-        Timber.tag("MountManager").d("mountCheckedImage: proceeding with performMount for stem=$stem, fsType=${fsType.mountType}, mode=$mode")
+        L.d("MountManager", "mountCheckedImage: proceeding with performMount for stem=$stem, fsType=${fsType.mountType}, mode=$mode")
         return performMount(imagePath, stem, fsType, mode)
     }
 

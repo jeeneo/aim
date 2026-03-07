@@ -17,7 +17,7 @@
 
 package org.codeberg.dryerlint.aim.utils
 
-import timber.log.Timber
+import org.codeberg.dryerlint.aim.L
 
 data class ShellResult(val exitCode: Int, val output: String) {
     val isSuccess get() = exitCode == 0
@@ -168,7 +168,7 @@ object RootShell {
         val command = try {
             ShellCmd.of(binary, *args, busyboxBin = busyboxBin)
         } catch (_: IllegalArgumentException) {
-            Timber.tag(TAG).e("Blocked execution of non-whitelisted binary: $binary")
+            L.e(TAG, "Blocked execution of non-whitelisted binary: $binary")
             return ShellResult(-1, "Binary not allowed: $binary")
         }
         return cmd(command, pipeInto, chain, orChain, redirectErr, ignoreError, suppressErr)
@@ -193,7 +193,7 @@ object RootShell {
             val probeCode = probe.waitFor()
             if (probeCode == 0 && probeOut.contains("uid=0")) {
                 resolvedSuPrefix = prefix
-                Timber.tag(TAG).i("Resolved su prefix: ${prefix.joinToString(" ")}")
+                L.i(TAG, "Resolved su prefix: ${prefix.joinToString(" ")}")
                 return ProcessBuilder(*(prefix + cmdLine).toTypedArray()).redirectErrorStream(true)
                     .start()
             }
@@ -219,8 +219,8 @@ object RootShell {
             sb.toString()
         }.trim()
         ShellResult(p.waitFor(), output)
-    } catch (e: Exception) {
-        Timber.tag(TAG).e(e, "exec failed")
+        } catch (e: Exception) {
+        L.e(TAG, "exec failed", e)
         ShellResult(-1, e.message ?: "Process failed")
     }
 }

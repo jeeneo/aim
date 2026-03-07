@@ -24,7 +24,7 @@ package org.codeberg.dryerlint.aim.utils
 import android.content.Context
 import org.codeberg.dryerlint.aim.FsType
 import org.codeberg.dryerlint.aim.R
-import timber.log.Timber
+import org.codeberg.dryerlint.aim.L
 
 private const val TAG = "PartitionTable"
 private val PARTITION_TYPE_NAMES = mapOf(
@@ -126,15 +126,15 @@ fun probePartitionTable(ctx: Context, imagePath: String, busyboxBin: String): Pa
         entries.removeAll { p ->
             val end = p.offsetBytes + p.sizeBytes
             if (p.offsetBytes < 0 || p.sizeBytes < 0 || end < 0 || p.offsetBytes > totalSize) {
-                Timber.tag(TAG).w("P${p.index}: partition boundaries invalid or exceed image size, skipping")
+                L.w(TAG, "P${p.index}: partition boundaries invalid or exceed image size, skipping")
                 true
             } else false
         }
     }
     if (entries.isEmpty()) return null
-    Timber.tag(TAG).d("${scheme.name} image: ${entries.size} partition(s), total=$totalSize")
+    L.d(TAG, "${scheme.name} image: ${entries.size} partition(s), total=$totalSize")
     entries.forEach { p ->
-        Timber.tag(TAG).d("  P${p.index}: type=${p.typeName}, start=${p.startLBA}, size=${p.sizeSectors} sectors (${p.sizeBytes} bytes)")
+        L.d(TAG, "  P${p.index}: type=${p.typeName}, start=${p.startLBA}, size=${p.sizeSectors} sectors (${p.sizeBytes} bytes)")
     }
     return PartitionTableInfo(partitions = entries, totalSizeBytes = totalSize, scheme = scheme)
 }
@@ -155,9 +155,7 @@ fun probePartitionFilesystems(
         val label = labelToMountStem(rawLabel)
         if (detected != null) {
             val refinedTypeName = fsDisplayName(ctx, detected)
-            Timber.tag(TAG).d(
-                "P${part.index}: ${detected.mountType}" + if (label != null) " label='$label'" else ""
-            )
+            L.d(TAG, "P${part.index}: ${detected.mountType}" + if (label != null) " label='$label'" else "")
             part.copy(
                 detectedFs = detected,
                 detectedFsName = detected.mountType,
@@ -166,9 +164,7 @@ fun probePartitionFilesystems(
             )
         } else {
             val fsName = identifyUnsupportedFs(::probe)
-            Timber.tag(TAG).d(
-                "P${part.index}: ${fsName ?: "unknown"} fs (type=0x${"%02X".format(part.typeId)})"
-            )
+            L.d(TAG, "P${part.index}: ${fsName ?: "unknown"} fs (type=0x${"%02X".format(part.typeId)})")
             part.copy(detectedFsName = fsName, typeName = fsName ?: part.typeName)
         }
     }
@@ -197,7 +193,7 @@ private fun parseMBREntries(
 ): Pair<MutableList<PartitionEntry>, PartitionScheme>? {
     val rawHex = hexAt(446, 64, 0L)
     if (rawHex.length < 128) {
-        Timber.tag(TAG).w("short partition table read: ${rawHex.length} hex chars")
+        L.w(TAG, "short partition table read: ${rawHex.length} hex chars")
         return null
     }
     val entries = mutableListOf<PartitionEntry>()
@@ -214,15 +210,15 @@ private fun parseMBREntries(
             startLBA = parseL3U32(entry, 16)
             sizeSectors = parseL3U32(entry, 24)
         } catch (e: NumberFormatException) {
-            Timber.tag(TAG).w("Malformed partition entry $i: ${e.message}")
+            L.w(TAG, "Malformed partition entry $i: ${e.message}")
             continue
         } catch (e: IndexOutOfBoundsException) {
-            Timber.tag(TAG).w("Truncated partition entry $i: ${e.message}")
+            L.w(TAG, "Truncated partition entry $i: ${e.message}")
             continue
         }
         if (typeId == 0 || sizeSectors == 0L) continue
         if (startLBA > Long.MAX_VALUE / 512 || sizeSectors > Long.MAX_VALUE / 512) {
-            Timber.tag(TAG).w("Partition $i: sector values too large, skipping")
+            L.w(TAG, "Partition $i: sector values too large, skipping")
             continue
         }
         val typeName = PARTITION_TYPE_NAMES[typeId] ?: ctx.getString(
@@ -250,21 +246,21 @@ private fun parseGPTEntries(
 ): Pair<MutableList<PartitionEntry>, PartitionScheme>? {
     val headerFields = hexAt(72, 16, GPT_HEADER_OFFSET)
     if (headerFields.length < 32) {
-        Timber.tag(TAG).w("short GPT header read: ${headerFields.length} hex chars")
+        L.w(TAG, "short GPT header read: ${headerFields.length} hex chars")
         return null
     }
     val entriesStartLBA = parseL3U64(headerFields, 0)
     val numEntries = parseL3U32(headerFields, 16).toInt()
     val entrySize = parseL3U32(headerFields, 24).toInt()
     if (entrySize !in 128..4096 || numEntries <= 0) {
-        Timber.tag(TAG).w("invalid GPT header: entrySize=$entrySize, numEntries=$numEntries")
+        L.w(TAG, "invalid GPT header: entrySize=$entrySize, numEntries=$numEntries")
         return null
     }
     val entriesOffset = entriesStartLBA * 512
     val readCount = minOf(numEntries, MAX_GPT_ENTRIES)
     val totalReadBytes = readCount * entrySize
     if (entriesOffset < 0 || entriesOffset > 1024L * 1024 * 1024) {
-        Timber.tag(TAG).w("GPT entry table offset implausible: $entriesOffset")
+        L.w(TAG, "GPT entry table offset implausible: $entriesOffset")
         return null
     }
     val rawHex = hexAt(0, totalReadBytes, entriesOffset)
@@ -281,7 +277,7 @@ private fun parseGPTEntries(
         if (startLBA !in 1..endLBA) continue
         val sizeSectors = endLBA - startLBA + 1
         if (startLBA > Long.MAX_VALUE / 512 || sizeSectors > Long.MAX_VALUE / 512) {
-            Timber.tag(TAG).w("GPT P${i + 1}: sector values too large, skipping")
+            L.w(TAG, "GPT P${i + 1}: sector values too large, skipping")
             continue
         }
         val guidName = GPT_TYPE_GUIDS[typeGuid] ?: ctx.getString(R.string.partition_type_unknown)

@@ -30,7 +30,7 @@ import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
 import android.webkit.MimeTypeMap
-import timber.log.Timber
+import org.codeberg.dryerlint.aim.L
 import java.io.File
 import java.io.FileNotFoundException
 import java.nio.file.Files
@@ -173,7 +173,7 @@ class ImageProvider : DocumentsProvider() {
     }
 
     private fun logSecurityEvent(event: String, vararg details: String) {
-        Timber.tag(TAG).w("SECURITY: $event | ${details.joinToString(" | ")}")
+        L.w(TAG, "SECURITY: $event | ${details.joinToString(" | ")}")
     }
 
     override fun onCreate(): Boolean = true

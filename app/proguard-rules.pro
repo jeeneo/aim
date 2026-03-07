@@ -30,10 +30,6 @@
 -keep class org.codeberg.dryerlint.aim.utils.ShellArg { *; }
 -keep class org.codeberg.dryerlint.aim.utils.RootShell { *; }
 
-# Keep Timber and any custom Tree implementations in release builds.
--keep class timber.log.** { *; }
--keep class ** extends timber.log.Timber$Tree { *; }
-
 # Keep common logging APIs and methods.
 -keep class android.util.Log { *; }
 -keep class java.util.logging.** { *; }
