@@ -19,6 +19,7 @@ package org.codeberg.dryerlint.aim
 
 import android.content.Context
 import android.os.Process
+import android.util.Log
 import timber.log.Timber
 import java.io.File
 import java.time.Instant
@@ -44,13 +45,25 @@ object DebugLog {
 
     fun initialize() {
         if (!timberInitialized.compareAndSet(false, true)) return
-        Timber.plant(Timber.DebugTree())
+        if (BuildConfig.DEBUG) {
+            Timber.plant(Timber.DebugTree())
+        } else {
+            Timber.plant(object : Timber.Tree() {
+                override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
+                    Log.println(priority, tag ?: TAG, message)
+                    t?.let { Log.println(priority, tag ?: TAG, Log.getStackTraceString(it)) }
+                }
+            })
+        }
         Timber.tag(TAG).i("Timber initialized")
     }
 
     fun setEnabled(context: Context, enable: Boolean) {
         if (enable == captureEnabled.get()) return
-        if (enable) start(context) else stop()
+        if (enable) {
+            initialize()
+            start(context)
+        } else stop()
     }
 
     private fun start(context: Context) {
