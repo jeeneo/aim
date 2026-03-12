@@ -23,8 +23,8 @@ package org.codeberg.dryerlint.aim.utils
 
 import android.content.Context
 import org.codeberg.dryerlint.aim.FsType
-import org.codeberg.dryerlint.aim.R
 import org.codeberg.dryerlint.aim.L
+import org.codeberg.dryerlint.aim.R
 
 private const val TAG = "PartitionTable"
 private val PARTITION_TYPE_NAMES = mapOf(
@@ -134,7 +134,10 @@ fun probePartitionTable(ctx: Context, imagePath: String, busyboxBin: String): Pa
     if (entries.isEmpty()) return null
     L.d(TAG, "${scheme.name} image: ${entries.size} partition(s), total=$totalSize")
     entries.forEach { p ->
-        L.d(TAG, "  P${p.index}: type=${p.typeName}, start=${p.startLBA}, size=${p.sizeSectors} sectors (${p.sizeBytes} bytes)")
+        L.d(
+            TAG,
+            "  P${p.index}: type=${p.typeName}, start=${p.startLBA}, size=${p.sizeSectors} sectors (${p.sizeBytes} bytes)"
+        )
     }
     return PartitionTableInfo(partitions = entries, totalSizeBytes = totalSize, scheme = scheme)
 }
@@ -155,7 +158,10 @@ fun probePartitionFilesystems(
         val label = labelToMountStem(rawLabel)
         if (detected != null) {
             val refinedTypeName = fsDisplayName(ctx, detected)
-            L.d(TAG, "P${part.index}: ${detected.mountType}" + if (label != null) " label='$label'" else "")
+            L.d(
+                TAG,
+                "P${part.index}: ${detected.mountType}" + if (label != null) " label='$label'" else ""
+            )
             part.copy(
                 detectedFs = detected,
                 detectedFsName = detected.mountType,
@@ -164,7 +170,10 @@ fun probePartitionFilesystems(
             )
         } else {
             val fsName = identifyUnsupportedFs(::probe)
-            L.d(TAG, "P${part.index}: ${fsName ?: "unknown"} fs (type=0x${"%02X".format(part.typeId)})")
+            L.d(
+                TAG,
+                "P${part.index}: ${fsName ?: "unknown"} fs (type=0x${"%02X".format(part.typeId)})"
+            )
             part.copy(detectedFsName = fsName, typeName = fsName ?: part.typeName)
         }
     }

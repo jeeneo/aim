@@ -32,10 +32,8 @@ import kotlinx.coroutines.withContext
 import org.codeberg.dryerlint.aim.utils.ImagePathResolver
 import org.codeberg.dryerlint.aim.utils.PartitionEntry
 import org.codeberg.dryerlint.aim.utils.PartitionScheme
-import org.codeberg.dryerlint.aim.utils.PartitionedImageException
 import org.codeberg.dryerlint.aim.utils.validateBindDir
 import org.codeberg.dryerlint.aim.utils.validatePath
-import org.codeberg.dryerlint.aim.L
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -94,13 +92,11 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
 
     private val app: Application = application
     val mountManager = MountManager(
-        application,
-        object : MountManager.RootsChangedNotifier {
+        application, object : MountManager.RootsChangedNotifier {
             override fun notify(context: Context) {
                 ImageProvider.notifyRootsChanged(context)
             }
-        }
-    )
+        })
     private val mountedPartitionIndex = mutableMapOf<String, Int>()
     private val mountedStem = mutableMapOf<String, String>()
 
@@ -140,8 +136,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         fallback: String = app.getString(R.string.alert_environment_check_failed),
     ): String {
         return throwable.message?.takeIf { it.isNotBlank() }
-            ?: throwable.javaClass.simpleName.takeIf { it.isNotBlank() }
-            ?: fallback
+            ?: throwable.javaClass.simpleName.takeIf { it.isNotBlank() } ?: fallback
     }
 
     fun toggleDebugMode() {
@@ -222,9 +217,12 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         }
         imagePath?.let { mountedBindState.remove(it) }
         val result = withContext(Dispatchers.IO) { mountManager.unmountImage(mountedImage) }
-        when (result) {
-            is MountResult.Failure -> return errorText(Exception(result.message), app.getString(R.string.error_unmount_failed))
-            else -> return null
+        return when (result) {
+            is MountResult.Failure -> errorText(
+                Exception(result.message), app.getString(R.string.error_unmount_failed)
+            )
+
+            else -> null
         }
     }
 
@@ -514,7 +512,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     directMount = imported?.bindDir != null,
                     imagePath = img.path
                 )
-                    if (err != null) {
+                if (err != null) {
                     L.e(TAG, "Unmount failed: ${img.path}")
                     errors += app.getString(R.string.error_op_unmount, img.displayName, err)
                 } else {
@@ -534,25 +532,28 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             if (!img.enabled || img.isMounted) continue
             val imported = allImported.find { it.path == img.path }
             val stem = stemFor(img.path, allImported)
-            val result = mountOrPartitionMount(img.path, imported, stem, img.displayName)
-            when (result) {
+            when (val result = mountOrPartitionMount(img.path, imported, stem, img.displayName)) {
                 is MountResult.Mounted, is MountResult.AlreadyMounted, is MountResult.Unmounted -> {
                     val part = imported?.selectedPartitionIndex
                     if (part != null) mountedPartitionIndex[img.path] = part
                     mountedStem[img.path] = stem
                 }
+
                 is MountResult.PartitionedImage -> {
                     if (imported?.hasPartitions != true) {
                         updateImportedImage(img.path) {
                             it.copy(hasPartitions = true, selectedPartitionIndex = null)
                         }
                     }
-                    showPartitionDialog(img.path, img.displayName)
+                    showPartitionDialog(img.path, img.displayName, result.result)
                 }
+
                 is MountResult.Failure -> {
                     L.e(TAG, "Mount failed: ${img.path}")
                     errors += app.getString(
-                        R.string.error_op_mount, img.displayName, errorText(Exception(result.message))
+                        R.string.error_op_mount,
+                        img.displayName,
+                        errorText(Exception(result.message))
                     )
                 }
             }
@@ -596,18 +597,22 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     if (part != null) mountedPartitionIndex[img.path] = part
                     mountedStem[img.path] = newStem
                 }
+
                 is MountResult.PartitionedImage -> {
                     if (imported?.hasPartitions != true) {
                         updateImportedImage(img.path) {
                             it.copy(hasPartitions = true, selectedPartitionIndex = null)
                         }
                     }
-                    showPartitionDialog(img.path, img.displayName)
+                    showPartitionDialog(img.path, img.displayName, result.result)
                 }
+
                 is MountResult.Failure -> {
                     L.e(TAG, "Remount failed: ${img.path}")
                     errors += app.getString(
-                        R.string.error_op_remount, img.displayName, errorText(Exception(result.message))
+                        R.string.error_op_remount,
+                        img.displayName,
+                        errorText(Exception(result.message))
                     )
                 }
             }
@@ -649,13 +654,18 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     is BindResult.Exposed, is BindResult.AlreadyExposed -> {
                         mountedBindState[img.path] = BindState(imageBindDir, isCustomBindDir)
                     }
+
                     is BindResult.Failure -> {
                         L.e(TAG, "Bind create failed: ${img.path}")
                         errors += app.getString(
-                            R.string.error_op_bind, img.displayName, errorText(Exception(bindRes.message))
+                            R.string.error_op_bind,
+                            img.displayName,
+                            errorText(Exception(bindRes.message))
                         )
                     }
-                    else -> { /* Skipped */ }
+
+                    else -> { /* Skipped */
+                    }
                 }
             } else {
                 val oldBind = mountedBindState[img.path]
@@ -669,8 +679,12 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    private fun showPartitionDialog(imagePath: String, displayName: String) {
-        val pr = mountManager.probePartitions(imagePath) ?: return
+    private fun showPartitionDialog(
+        imagePath: String,
+        displayName: String,
+        probed: PartitionedImageResult? = null,
+    ) {
+        val pr = probed ?: mountManager.probePartitions(imagePath) ?: return
         val imported = loadImportedImages().find { it.path == imagePath }
         queuePartitions(
             PartitionState(
@@ -778,7 +792,8 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     val fileSize = withContext(Dispatchers.IO) { File(path).length() }
                     val detectedFs = try {
                         withContext(Dispatchers.IO) {
-                            when (val d = org.codeberg.dryerlint.aim.utils.detectFilesystem(app, path, "")) {
+                            when (val d =
+                                org.codeberg.dryerlint.aim.utils.detectFilesystem(app, path, "")) {
                                 is org.codeberg.dryerlint.aim.utils.DetectFsResult.Found -> d.fs
                                 is org.codeberg.dryerlint.aim.utils.DetectFsResult.Unknown -> null
                                 is org.codeberg.dryerlint.aim.utils.DetectFsResult.AccessError -> {

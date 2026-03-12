@@ -17,8 +17,8 @@
 
 package org.codeberg.dryerlint.aim.utils
 
-import org.codeberg.dryerlint.aim.L
 import org.codeberg.dryerlint.aim.FsType
+import org.codeberg.dryerlint.aim.L
 
 private const val TAG = "LabelParser"
 private const val MAX_LABEL_LENGTH = 64

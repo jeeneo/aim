@@ -19,8 +19,6 @@ package org.codeberg.dryerlint.aim
 
 import android.content.Context
 import android.os.Process
-import android.util.Log
-import org.codeberg.dryerlint.aim.L
 import java.io.File
 import java.time.Instant
 import java.time.ZoneOffset
@@ -35,13 +33,8 @@ object DebugLog {
     private var logcatProcess: java.lang.Process? = null
     private var logFile: File? = null
 
-    private val rfc3339 = DateTimeFormatter
-        .ofPattern("yyyy-MM-dd'T'HH_mm_ss'Z'")
-        .withZone(ZoneOffset.UTC)
-
-    val isEnabled: Boolean get() = captureEnabled.get()
-
-    val currentLogFile: File? get() = logFile
+    private val rfc3339 =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH_mm_ss'Z'").withZone(ZoneOffset.UTC)
 
     fun initialize() {
         if (!loggingInitialized.compareAndSet(false, true)) return

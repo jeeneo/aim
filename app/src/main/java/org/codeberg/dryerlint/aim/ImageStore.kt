@@ -21,7 +21,6 @@ import android.content.Context
 import androidx.core.util.AtomicFile
 import org.json.JSONArray
 import org.json.JSONObject
-import org.codeberg.dryerlint.aim.L
 import java.io.File
 
 class ImageStore(context: Context) {

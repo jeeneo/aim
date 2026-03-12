@@ -63,7 +63,6 @@ fun checkEnv(ctx: Context): Pair<EnvironmentStatus, String> {
         rootAvailable = true,
         rootMessage = ctx.getString(R.string.env_root_granted),
         busyboxMessage = ctx.getString(R.string.env_busybox_not_found),
-        // BusyBox is optional; we can use toolbox/toybox binaries when available.
-        ready = true
+        ready = false
     ) to ""
 }

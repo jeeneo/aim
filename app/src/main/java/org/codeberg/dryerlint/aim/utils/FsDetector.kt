@@ -116,8 +116,7 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): Detec
     if (accessProbe.exitCode != 0) {
         val reason = accessProbe.output.trim()
         return DetectFsResult.AccessError(
-            reason.ifBlank { "read probe failed" },
-            accessProbe.exitCode
+            reason.ifBlank { "read probe failed" }, accessProbe.exitCode
         )
     }
     fun summarize(out: String, max: Int = 160) =

@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.codeberg.dryerlint.aim.utils.ALLOWED_CHMOD_MODES
 import org.codeberg.dryerlint.aim.utils.FS_LIST
 import org.codeberg.dryerlint.aim.utils.PartitionEntry
 import org.codeberg.dryerlint.aim.utils.PartitionTableInfo
@@ -30,7 +31,6 @@ import org.codeberg.dryerlint.aim.utils.PartitionedImageException
 import org.codeberg.dryerlint.aim.utils.RootShell
 import org.codeberg.dryerlint.aim.utils.ShellArg
 import org.codeberg.dryerlint.aim.utils.ShellCmd
-import org.codeberg.dryerlint.aim.utils.ALLOWED_CHMOD_MODES
 import org.codeberg.dryerlint.aim.utils.buildMountOpts
 import org.codeberg.dryerlint.aim.utils.checkEnv
 import org.codeberg.dryerlint.aim.utils.detectFilesystem
@@ -58,10 +58,9 @@ enum class FsType(
     val posixPermissions: Boolean,
     val readOnly: Boolean = false,
 ) {
-    EXT4("ext4", true),
-    VFAT("vfat", false),
-    EXFAT("exfat", false),
-    ISO9660("iso9660", false, readOnly = true),
+    EXT4("ext4", true), VFAT("vfat", false), EXFAT("exfat", false), ISO9660(
+        "iso9660", false, readOnly = true
+    ),
 }
 
 data class MountedImage(
@@ -219,9 +218,6 @@ class MountManager(
         return status
     }
 
-    val busyboxPath: String
-        get() = busyboxBin
-
     private fun readMountedImages(): List<MountedImage> {
         val r = RootShell.cmd(
             "grep",
@@ -244,19 +240,21 @@ class MountManager(
             val fsTypeStr = p.getOrNull(2)
             val fs = fsTypeStr?.let { FS_LIST[it] }
             when {
-                p.size < 3 ->
-                    L.d(TAG, "SKIP (fields=${p.size}): $line").let { null }
-                fs == null ->
-                    L.d(TAG, "SKIP (unknown fs '$fsTypeStr'): $line").let { null }
-                device == null || "loop" !in device ->
-                    L.d(TAG, "SKIP (not loop, device=$device): $line").let { null }
-                else ->
-                    MountedImage(device, mountPoint!!, fs)
-                        .also { L.d(TAG, "MOUNT: $mountPoint ($fsTypeStr)") }
+                p.size < 3 -> L.d(TAG, "SKIP (fields=${p.size}): $line").let { null }
+
+                fs == null -> L.d(TAG, "SKIP (unknown fs '$fsTypeStr'): $line").let { null }
+
+                device == null || "loop" !in device -> L.d(
+                    TAG, "SKIP (not loop, device=$device): $line"
+                ).let { null }
+
+                else -> MountedImage(device, mountPoint!!, fs).also {
+                    L.d(
+                        TAG, "MOUNT: $mountPoint ($fsTypeStr)"
+                    )
+                }
             }
-        }.distinctBy { "${it.mountPoint}|${it.loopDevice}" }
-            .sortedBy { it.mountPoint }
-            .toList()
+        }.distinctBy { "${it.mountPoint}|${it.loopDevice}" }.sortedBy { it.mountPoint }.toList()
             .also { L.d(TAG, "Total mounted: ${it.size}") }
     }
 
@@ -277,8 +275,10 @@ class MountManager(
         if (imagePath.isBlank()) return fail(R.string.error_empty_path)
 
         val isIso = imagePath.endsWith(".iso", ignoreCase = true)
-        if (!imagePath.endsWith(".img", ignoreCase = true) && !isIso)
-            return fail(R.string.error_only_img_iso_supported)
+        if (!imagePath.endsWith(
+                ".img", ignoreCase = true
+            ) && !isIso
+        ) return fail(R.string.error_only_img_iso_supported)
 
         val imageFile = File(imagePath)
         if (!imageFile.exists()) return fail(R.string.error_image_not_found, imagePath)
@@ -290,17 +290,18 @@ class MountManager(
         if (!isIso && isSparseImage(imagePath)) return fail(R.string.error_sparse_not_supported)
 
         val fsType = try {
-                when (val detect = detectFilesystem(ctx, imagePath, busyboxBin)) {
-                    is org.codeberg.dryerlint.aim.utils.DetectFsResult.Found -> detect.fs
-                    is org.codeberg.dryerlint.aim.utils.DetectFsResult.Unknown -> {
-                        L.w(TAG, "fs detection failed for $imagePath (${imageFile.length()} bytes)")
-                        return fail(R.string.error_unsupported_filesystem)
-                    }
-                    is org.codeberg.dryerlint.aim.utils.DetectFsResult.AccessError -> {
-                        L.w(TAG, "fs access error for $imagePath: ${detect.reason}")
-                        return fail(R.string.error_ksu_or_alike_permission)
-                    }
+            when (val detect = detectFilesystem(ctx, imagePath, busyboxBin)) {
+                is org.codeberg.dryerlint.aim.utils.DetectFsResult.Found -> detect.fs
+                is org.codeberg.dryerlint.aim.utils.DetectFsResult.Unknown -> {
+                    L.w(TAG, "fs detection failed for $imagePath (${imageFile.length()} bytes)")
+                    return fail(R.string.error_unsupported_filesystem)
                 }
+
+                is org.codeberg.dryerlint.aim.utils.DetectFsResult.AccessError -> {
+                    L.w(TAG, "fs access error for $imagePath: ${detect.reason}")
+                    return fail(R.string.error_ksu_or_alike_permission)
+                }
+            }
         } catch (e: PartitionedImageException) {
             L.d(TAG, "Partitioned image detected: $imagePath")
             val partResult = PartitionedImageResult(
@@ -350,29 +351,26 @@ class MountManager(
         val imagePath = path.trim()
         if (!validatePath(imagePath)) return fail(R.string.error_image_path_invalid_chars)
 
-        val fsType = partition.detectedFs
-            ?: return fail(R.string.error_no_fs_on_partition, partition.index)
+        val fsType =
+            partition.detectedFs ?: return fail(R.string.error_no_fs_on_partition, partition.index)
         val stem = sanitizeStem(
             mountDirName
                 ?: filenameToMountStem(File(imagePath).nameWithoutExtension + "_p${partition.index}")
         )
 
-        return performMount(imagePath, stem, fsType, mode, partition.offsetBytes, partition.sizeBytes)
+        return performMount(imagePath, stem, fsType, mode, partition.offsetBytes)
     }
 
     fun probePartitions(path: String): PartitionedImageResult? {
         val table = probePartitionTable(ctx, path, busyboxBin) ?: return null
         return PartitionedImageResult(
-            table,
-            probePartitionFilesystems(ctx, path, table.partitions, busyboxBin)
+            table, probePartitionFilesystems(ctx, path, table.partitions, busyboxBin)
         )
     }
 
     suspend fun unmountImage(item: MountedImage): MountResult = mountMutex.withLock {
-        if (!item.mountPoint.startsWith("$mountsDir/"))
-            return fail(R.string.error_invalid_mount_point)
-        if (!validatePath(item.mountPoint) || !validatePath(item.loopDevice))
-            return fail(R.string.error_path_invalid_chars)
+        if (!item.mountPoint.startsWith("$mountsDir/")) return fail(R.string.error_invalid_mount_point)
+        if (!validatePath(item.mountPoint) || !validatePath(item.loopDevice)) return fail(R.string.error_path_invalid_chars)
 
         val mpArg = pathArg(item.mountPoint)
 
@@ -383,12 +381,17 @@ class MountManager(
         }
 
         RootShell.cmd(
-            "fuser", ShellArg.literal("-km"), mpArg,
-            busyboxBin = busyboxBin, suppressErr = true, ignoreError = true
+            "fuser",
+            ShellArg.literal("-km"),
+            mpArg,
+            busyboxBin = busyboxBin,
+            suppressErr = true,
+            ignoreError = true
         )
 
-        val umountOk = RootShell.cmd("umount", mpArg, busyboxBin = busyboxBin).exitCode == 0
-                || RootShell.cmd("umount", mpArg).exitCode == 0
+        val umountOk = RootShell.cmd(
+            "umount", mpArg, busyboxBin = busyboxBin
+        ).exitCode == 0 || RootShell.cmd("umount", mpArg).exitCode == 0
         if (!umountOk) {
             L.e(TAG, "Failed to unmount ${item.mountPoint}")
             return fail(R.string.error_unmount_failed)
@@ -396,7 +399,10 @@ class MountManager(
 
         val loopDetached = runCatching { detachLoop(item.loopDevice) }
         if (loopDetached.isFailure) {
-            L.w(TAG, "Loop detach failed for ${item.loopDevice}: ${loopDetached.exceptionOrNull()?.message}")
+            L.w(
+                TAG,
+                "Loop detach failed for ${item.loopDevice}: ${loopDetached.exceptionOrNull()?.message}"
+            )
         }
 
         RootShell.cmd("rmdir", mpArg, suppressErr = true, ignoreError = true)
@@ -416,22 +422,20 @@ class MountManager(
         requireEnvReadyBind()?.let { return it }
         bindDir ?: return bindFail(R.string.error_bind_dir_not_specified)
 
-        val rbd = resolveAndValidateBindDir(bindDir)
-            ?: return bindFail(R.string.error_bind_dir_rejected)
+        val rbd =
+            resolveAndValidateBindDir(bindDir) ?: return bindFail(R.string.error_bind_dir_rejected)
 
         val safeStem = sanitizeStem(stem)
         val source = "$mountsDir/$safeStem"
         val target = if (directMount) rbd else "$rbd/$safeStem"
 
-        if (!validatePath(source) || !validatePath(target) || !validatePath(rbd))
-            return bindFail(R.string.error_path_invalid_chars)
+        if (!validatePath(source) || !validatePath(target) || !validatePath(rbd)) return bindFail(R.string.error_path_invalid_chars)
 
         val tgtArg = pathArg(target)
         val dirArg = pathArg(rbd)
 
         val mkdirDir = RootShell.cmd(
-            "mkdir", ShellArg.literal("-p"), dirArg,
-            chain = ShellCmd.chain(
+            "mkdir", ShellArg.literal("-p"), dirArg, chain = ShellCmd.chain(
                 ShellCmd.of("chown", ShellArg.literal("1023:1023"), dirArg),
                 ShellCmd.of("chmod", enumArg("775", ALLOWED_CHMOD_MODES), dirArg)
             )
@@ -440,18 +444,15 @@ class MountManager(
             L.e(TAG, "Failed to create storage dir: $rbd")
             return bindFail(R.string.error_failed_create_storage_dir, rbd)
         }
-
         if (isMountedAt(target)) return BindResult.AlreadyExposed(target)
-
         if (directMount) {
             val ls = RootShell.cmd("ls", ShellArg.literal("-A"), tgtArg, suppressErr = true)
-            if (ls.exitCode == 0 && ls.output.isNotBlank())
-                return bindFail(R.string.dialog_bind_nonempty, target)
+            if (ls.exitCode == 0 && ls.output.isNotBlank()) return bindFail(
+                R.string.dialog_bind_nonempty, target
+            )
         }
-
         val mkdirTgt = RootShell.cmd(
-            "mkdir", ShellArg.literal("-p"), tgtArg,
-            chain = ShellCmd.chain(
+            "mkdir", ShellArg.literal("-p"), tgtArg, chain = ShellCmd.chain(
                 ShellCmd.of("chown", ShellArg.literal("1023:1023"), tgtArg),
                 ShellCmd.of("chmod", enumArg("775", ALLOWED_CHMOD_MODES), tgtArg)
             )
@@ -470,9 +471,12 @@ class MountManager(
         }
 
         RootShell.cmd(
-            "chcon", ShellArg.literal("-R"),
-            secontextArg("u:object_r:media_rw_data_file:s0"), tgtArg,
-            suppressErr = true, ignoreError = true
+            "chcon",
+            ShellArg.literal("-R"),
+            secontextArg("u:object_r:media_rw_data_file:s0"),
+            tgtArg,
+            suppressErr = true,
+            ignoreError = true
         )
         return BindResult.Exposed(target)
     }
@@ -484,8 +488,8 @@ class MountManager(
     ): BindResult = mountMutex.withLock {
         bindDir ?: return BindResult.Skipped
 
-        val rbd = resolveAndValidateBindDir(bindDir)
-            ?: return bindFail(R.string.error_bind_dir_rejected)
+        val rbd =
+            resolveAndValidateBindDir(bindDir) ?: return bindFail(R.string.error_bind_dir_rejected)
 
         val target = if (directMount) rbd else "$rbd/${sanitizeStem(stem)}"
         if (!validatePath(target)) return bindFail(R.string.error_path_invalid_chars)
@@ -556,7 +560,6 @@ class MountManager(
         fsType: FsType,
         mode: MountMode,
         partOffset: Long = 0,
-        partSize: Long = 0,
     ): MountResult {
         val mp = "$mountsDir/$stem"
         if (isMountedAt(mp)) {
@@ -565,7 +568,7 @@ class MountManager(
         }
 
         val opts = buildMountOpts(fsType, mode)
-        val result = doMount(ctx, imagePath, mp, fsType, opts, busyboxBin, partOffset, partSize)
+        val result = doMount(ctx, imagePath, mp, fsType, opts, busyboxBin, partOffset)
 
         if (result.isSuccess) {
             if (!isMountedAt(mp)) {
@@ -585,7 +588,10 @@ class MountManager(
 
         L.e(TAG, "doMount failed for $imagePath -> $mp: ${result.exceptionOrNull()?.message}")
         val cause = result.exceptionOrNull()?.message ?: ""
-        return MountResult.Failure(ctx.getString(R.string.error_mount_failed_output, if (cause.isNotBlank()) cause else "unknown"))
+        return MountResult.Failure(
+            ctx.getString(
+                R.string.error_mount_failed_output, cause.ifBlank { "unknown" })
+        )
     }
 
     companion object {

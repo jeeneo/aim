@@ -119,11 +119,15 @@ class ShellCmd private constructor(internal val fragment: String) {
 object RootShell {
     private const val TAG = "RootShell"
     private const val MAX_OUTPUT_CHARS = 256_000 // ~256 KB guard against unbounded reads
+
+    // will always run shells under global namespace
+    // to avoid issues with su "permissions denied errors" that use inhereted namespaces
     private val SU_PREFIXES = listOf(
         listOf("su", "--mount-master", "-c"),
         listOf("su", "-mm", "-c"),
         listOf("su", "-c"),
     )
+
     @Volatile
     private var resolvedSuPrefix: List<String>? = null
 
@@ -174,11 +178,6 @@ object RootShell {
         return cmd(command, pipeInto, chain, orChain, redirectErr, ignoreError, suppressErr)
     }
 
-    internal fun testBusybox(): Boolean {
-        val result = exec("which busybox >/dev/null 2>&1")
-        return result.isSuccess
-    }
-
     private fun startSu(cmdLine: String): Process {
         resolvedSuPrefix?.let { prefix ->
             return ProcessBuilder(*(prefix + cmdLine).toTypedArray()).redirectErrorStream(true)
@@ -202,24 +201,40 @@ object RootShell {
     }
 
     internal fun exec(cmdLine: String): ShellResult = try {
-        val p = startSu(cmdLine)
-        val output = p.inputStream.bufferedReader().use { reader ->
-            val buf = CharArray(8192)
-            val sb = StringBuilder()
-            var n: Int
-            while (reader.read(buf).also { n = it } != -1) {
-                if (sb.length + n > MAX_OUTPUT_CHARS) {
-                    sb.appendRange(buf, 0, maxOf(0, MAX_OUTPUT_CHARS - sb.length))
-                    while (reader.read(buf) != -1) { /* discard */
+        fun execOnce(): ShellResult {
+            val p = startSu(cmdLine)
+            val output = p.inputStream.bufferedReader().use { reader ->
+                val buf = CharArray(8192)
+                val sb = StringBuilder()
+                var n: Int
+                while (reader.read(buf).also { n = it } != -1) {
+                    if (sb.length + n > MAX_OUTPUT_CHARS) {
+                        sb.appendRange(buf, 0, maxOf(0, MAX_OUTPUT_CHARS - sb.length))
+                        while (reader.read(buf) != -1) { /* discard */
+                        }
+                        break
                     }
-                    break
+                    sb.appendRange(buf, 0, n)
                 }
-                sb.appendRange(buf, 0, n)
+                sb.toString()
+            }.trim()
+            return ShellResult(p.waitFor(), output)
+        }
+
+        val first = execOnce()
+        if (resolvedSuPrefix != null && first.exitCode != 0) {
+            val out = first.output.lowercase()
+            val looksLikeSuOptionError =
+                (out.contains("unknown option") || out.contains("invalid option") || out.contains("unrecognized option")) && (out.contains(
+                    "su"
+                ) || out.contains("mount-master") || out.contains("-mm"))
+            if (looksLikeSuOptionError) {
+                resolvedSuPrefix = null
+                return execOnce()
             }
-            sb.toString()
-        }.trim()
-        ShellResult(p.waitFor(), output)
-        } catch (e: Exception) {
+        }
+        first
+    } catch (e: Exception) {
         L.e(TAG, "exec failed", e)
         ShellResult(-1, e.message ?: "Process failed")
     }

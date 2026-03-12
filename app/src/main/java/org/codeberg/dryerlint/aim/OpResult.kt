@@ -5,10 +5,8 @@ sealed class OpResult {
     data class Failure(val exception: Exception) : OpResult()
 
     val isSuccess: Boolean get() = this is Success
-    val isFailure: Boolean get() = this is Failure
 
     fun exceptionOrNull(): Exception? = (this as? Failure)?.exception
-    fun getOrNull(): String? = (this as? Success)?.output
 
     inline fun onSuccess(block: (String) -> Unit): OpResult {
         if (this is Success) block(output)
