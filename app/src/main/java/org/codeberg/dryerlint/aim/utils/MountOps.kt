@@ -27,7 +27,7 @@ import org.codeberg.dryerlint.aim.L
 private const val TAG = "MountOps"
 
 private val ALLOWED_FS_TYPES = setOf("ext4", "vfat", "exfat", "iso9660")
-private val ALLOWED_CHMOD_MODES = setOf("775", "664")
+public val ALLOWED_CHMOD_MODES = setOf("775", "664")
 private fun detailOrUnknown(output: String): String = output.trim().ifBlank { "no command output" }
 
 fun buildMountOpts(fsType: FsType, mode: MountMode): String {

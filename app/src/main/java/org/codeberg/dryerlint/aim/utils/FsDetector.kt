@@ -20,6 +20,7 @@ package org.codeberg.dryerlint.aim.utils
 import android.content.Context
 import org.codeberg.dryerlint.aim.FsType
 import org.codeberg.dryerlint.aim.L
+import java.io.File
 
 private const val TAG = "FsDetector"
 
@@ -91,8 +92,34 @@ class PartitionedImageException(val tableInfo: PartitionTableInfo) :
 // crude detect of a filesystems type for an image via blkid (preferred) or byte fallback.
 // returns null for unsupported/unknown, returns the FsType for raw filesystem images.
 // throws PartitionedImageException if the image is a partitioned disk.
-fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): FsType? {
+sealed class DetectFsResult {
+    data class Found(val fs: FsType) : DetectFsResult()
+    object Unknown : DetectFsResult()
+    data class AccessError(val reason: String, val exitCode: Int? = null) : DetectFsResult()
+}
+
+// returns a DetectFsResult: Found(FsType), Unknown, or AccessError when the image can't be read
+// throws PartitionedImageException if the image is a partitioned disk.
+fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): DetectFsResult {
+    val imgFile = File(imagePath)
+    if (!imgFile.exists()) return DetectFsResult.AccessError("file does not exist")
     val imgArg = pathArg(imagePath)
+    val accessProbe = RootShell.cmd(
+        "dd",
+        ShellArg.literal("if=${imgArg.quoted}"),
+        ShellArg.literal("of=/dev/null"),
+        ShellArg.literal("bs=1"),
+        ShellArg.literal("count=1"),
+        busyboxBin = busyboxBin,
+        redirectErr = true
+    )
+    if (accessProbe.exitCode != 0) {
+        val reason = accessProbe.output.trim()
+        return DetectFsResult.AccessError(
+            reason.ifBlank { "read probe failed" },
+            accessProbe.exitCode
+        )
+    }
     fun summarize(out: String, max: Int = 160) =
         out.replace('\n', ' ').replace(Regex("\\s+"), " ").trim()
             .let { if (it.length <= max) it else it.take(max) + "..." }
@@ -114,9 +141,9 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): FsTyp
         blkidAttempts += "#1: code=${r.exitCode}, type='${summarize(norm)}'"
         L.d(TAG, "blkid 1 exit=${r.exitCode}, out=${summarize(norm)}")
         if (r.exitCode == 0 && r.output.isNotBlank()) {
-            FS_LIST[norm]?.let { return it }
+            FS_LIST[norm]?.let { return DetectFsResult.Found(it) }
             L.w(TAG, "system blkid reported unsupported fs '$norm'")
-            return null
+            return DetectFsResult.Unknown
         }
     }
 
@@ -136,16 +163,16 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): FsTyp
         blkidAttempts += "#2: code=${r.exitCode}, type='${summarize(norm)}'"
         L.d(TAG, "blkid 2 exit=${r.exitCode}, out=${summarize(norm)}")
         if (r.exitCode == 0 && r.output.isNotBlank()) {
-            FS_LIST[norm]?.let { return it }
+            FS_LIST[norm]?.let { return DetectFsResult.Found(it) }
             L.w(TAG, "busybox blkid reported unsupported fs '$norm'")
-            return null
+            return DetectFsResult.Unknown
         }
     }
 
     fun probe(skip: Int, count: Int) = hexProbe(imagePath, skip, count, busyboxBin, imgArg)
 
     val result = detectFsByMagic(::probe)
-    if (result != null) return result
+    if (result != null) return DetectFsResult.Found(result)
 
     // detectFsByMagic returns null on 55AA with invalid BPB - check for partition table
     val fatSig = probe(510, 2)
@@ -157,5 +184,5 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): FsTyp
     }
 
     L.w(TAG, "unsupported '$imagePath'. blkid=[${blkidAttempts.joinToString("; ")}]")
-    return null
+    return DetectFsResult.Unknown
 }

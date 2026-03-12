@@ -153,4 +153,5 @@
     <string name="error_mount_not_visible">Mount did not appear in /proc/mounts after success. Your root shell likely uses an isolated mount namespace. Enable global/mount-master namespace in your root manager.</string>
 
     <string name="error_cannot_resolve_path">Cannot resolve path for %s</string>
+    <string name="error_ksu_or_alike_permission">Access was denied.\n\nIf you\'re using a kernel root manager (KernelSU or alike), create a custom app profile with:\n\nMount namespace: global\nuid = 0, gid = 0\nGroups: system, root, app\nCapabilities: CHOWN, DAC_OVERRIDE, FOWNER, SYS_ADMIN</string>
 </resources>

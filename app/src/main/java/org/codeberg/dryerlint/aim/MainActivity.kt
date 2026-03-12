@@ -40,7 +40,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -113,8 +115,10 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     val partitionState by viewModel.partitionPicker.collectAsState()
     val bindDir by viewModel.bindDir.collectAsState()
     val pkgName = LocalContext.current.packageName
+    val ksuProfileError = stringResource(R.string.error_ksu_or_alike_permission)
     var dialogImagePath by remember { mutableStateOf<String?>(null) }
     var showBindDirEdit by remember { mutableStateOf(false) }
+    var showKsuProfileDialog by remember { mutableStateOf(false) }
 
     val picker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -122,8 +126,12 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
         }
 
     LaunchedEffect(alerts) {
-        // always show the most-recent alert (new notifications replace the old)
         val alert = alerts.lastOrNull() ?: return@LaunchedEffect
+        if (!showKsuProfileDialog && alert.message.contains(ksuProfileError)) {
+            showKsuProfileDialog = true
+            return@LaunchedEffect
+        }
+        if (showKsuProfileDialog) return@LaunchedEffect
         suspendCancellableCoroutine { cont ->
             val snackbar = Snackbar.make(snackbarAnchor, alert.message, Snackbar.LENGTH_LONG)
             snackbar.addCallback(object : Snackbar.Callback() {
@@ -148,6 +156,26 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                 viewModel.setBindDir(newDir)
                 showBindDirEdit = false
             },
+        )
+    }
+
+    if (showKsuProfileDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showKsuProfileDialog = false
+                viewModel.acknowledgeFirstAlert()
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showKsuProfileDialog = false
+                        viewModel.acknowledgeFirstAlert()
+                    }
+                ) {
+                    Text(text = stringResource(R.string.dialog_ok))
+                }
+            },
+            text = { Text(text = ksuProfileError) },
         )
     }
 

@@ -30,7 +30,7 @@ import org.codeberg.dryerlint.aim.utils.PartitionedImageException
 import org.codeberg.dryerlint.aim.utils.RootShell
 import org.codeberg.dryerlint.aim.utils.ShellArg
 import org.codeberg.dryerlint.aim.utils.ShellCmd
-import org.codeberg.dryerlint.aim.utils.VALID_CHMOD_MODES
+import org.codeberg.dryerlint.aim.utils.ALLOWED_CHMOD_MODES
 import org.codeberg.dryerlint.aim.utils.buildMountOpts
 import org.codeberg.dryerlint.aim.utils.checkEnv
 import org.codeberg.dryerlint.aim.utils.detectFilesystem
@@ -290,10 +290,17 @@ class MountManager(
         if (!isIso && isSparseImage(imagePath)) return fail(R.string.error_sparse_not_supported)
 
         val fsType = try {
-                detectFilesystem(ctx, imagePath, busyboxBin) ?: run {
-                L.w(TAG, "fs detection failed for $imagePath (${imageFile.length()} bytes)")
-                return fail(R.string.error_unsupported_filesystem)
-            }
+                when (val detect = detectFilesystem(ctx, imagePath, busyboxBin)) {
+                    is org.codeberg.dryerlint.aim.utils.DetectFsResult.Found -> detect.fs
+                    is org.codeberg.dryerlint.aim.utils.DetectFsResult.Unknown -> {
+                        L.w(TAG, "fs detection failed for $imagePath (${imageFile.length()} bytes)")
+                        return fail(R.string.error_unsupported_filesystem)
+                    }
+                    is org.codeberg.dryerlint.aim.utils.DetectFsResult.AccessError -> {
+                        L.w(TAG, "fs access error for $imagePath: ${detect.reason}")
+                        return fail(R.string.error_ksu_or_alike_permission)
+                    }
+                }
         } catch (e: PartitionedImageException) {
             L.d(TAG, "Partitioned image detected: $imagePath")
             val partResult = PartitionedImageResult(
@@ -426,7 +433,7 @@ class MountManager(
             "mkdir", ShellArg.literal("-p"), dirArg,
             chain = ShellCmd.chain(
                 ShellCmd.of("chown", ShellArg.literal("1023:1023"), dirArg),
-                ShellCmd.of("chmod", enumArg("775", VALID_CHMOD_MODES), dirArg)
+                ShellCmd.of("chmod", enumArg("775", ALLOWED_CHMOD_MODES), dirArg)
             )
         )
         if (mkdirDir.exitCode != 0) {
@@ -446,7 +453,7 @@ class MountManager(
             "mkdir", ShellArg.literal("-p"), tgtArg,
             chain = ShellCmd.chain(
                 ShellCmd.of("chown", ShellArg.literal("1023:1023"), tgtArg),
-                ShellCmd.of("chmod", enumArg("775", VALID_CHMOD_MODES), tgtArg)
+                ShellCmd.of("chmod", enumArg("775", ALLOWED_CHMOD_MODES), tgtArg)
             )
         )
         if (mkdirTgt.exitCode != 0) {

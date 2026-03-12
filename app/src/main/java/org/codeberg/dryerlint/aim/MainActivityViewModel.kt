@@ -778,9 +778,14 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     val fileSize = withContext(Dispatchers.IO) { File(path).length() }
                     val detectedFs = try {
                         withContext(Dispatchers.IO) {
-                            org.codeberg.dryerlint.aim.utils.detectFilesystem(
-                                app, path, ""
-                            )
+                            when (val d = org.codeberg.dryerlint.aim.utils.detectFilesystem(app, path, "")) {
+                                is org.codeberg.dryerlint.aim.utils.DetectFsResult.Found -> d.fs
+                                is org.codeberg.dryerlint.aim.utils.DetectFsResult.Unknown -> null
+                                is org.codeberg.dryerlint.aim.utils.DetectFsResult.AccessError -> {
+                                    L.w(TAG, "fs access error probing $path: ${d.reason}")
+                                    null
+                                }
+                            }
                         }
                     } catch (_: Exception) {
                         null
