@@ -17,8 +17,6 @@
 
 package org.codeberg.dryerlint.aim.utils
 
-internal val VALID_CHMOD_MODES = setOf("775", "664", "777")
-
 fun pathArg(path: String): ShellArg {
     require(isValidPath(path)) { "Invalid path: $path" }
     return ShellArg.of(path)

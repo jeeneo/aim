@@ -21,7 +21,8 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import org.codeberg.dryerlint.aim.L
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.codeberg.dryerlint.aim.utils.FS_LIST
 import org.codeberg.dryerlint.aim.utils.PartitionEntry
 import org.codeberg.dryerlint.aim.utils.PartitionTableInfo
@@ -53,26 +54,25 @@ import java.io.File
 enum class MountMode { LOCAL, PUBLIC }
 
 enum class FsType(
-    val mountType: String, val posixPermissions: Boolean, val readOnly: Boolean = false
+    val mountType: String,
+    val posixPermissions: Boolean,
+    val readOnly: Boolean = false,
 ) {
-    EXT4("ext4", true), VFAT("vfat", false), EXFAT("exfat", false), ISO9660(
-        "iso9660", false, readOnly = true
-    ),
+    EXT4("ext4", true),
+    VFAT("vfat", false),
+    EXFAT("exfat", false),
+    ISO9660("iso9660", false, readOnly = true),
 }
 
 data class MountedImage(
-    val devicePath: String,
-    val mountPoint: String,
     val loopDevice: String,
-    val fsType: FsType = FsType.EXT4,
+    val mountPoint: String,
+    val fsType: FsType,
 )
 
-typealias OpResult = Result<String>
-
-// returned when mountImage detects a partitioned disk
 data class PartitionedImageResult(
     val tableInfo: PartitionTableInfo,
-    val partitions: List<PartitionEntry>, // with detectedFs filled in
+    val partitions: List<PartitionEntry>,
 )
 
 data class EnvironmentStatus(
@@ -84,32 +84,56 @@ data class EnvironmentStatus(
     val ready: Boolean = false,
 )
 
+sealed class MountResult {
+    data class Mounted(val mountPoint: String) : MountResult()
+    data class AlreadyMounted(val mountPoint: String) : MountResult()
+    data class Unmounted(val mountPoint: String) : MountResult()
+    data class PartitionedImage(val result: PartitionedImageResult) : MountResult()
+    data class Failure(val message: String) : MountResult()
+}
+
+sealed class BindResult {
+    data class Exposed(val target: String) : BindResult()
+    data class AlreadyExposed(val target: String) : BindResult()
+    data class Removed(val target: String) : BindResult()
+    data class Failure(val message: String) : BindResult()
+    object Skipped : BindResult()
+}
+
 fun generateMountStem(
     imagePath: String,
     allImagePaths: List<String>,
     diskLabel: String? = null,
     allLabels: Map<String, String?> = emptyMap(),
 ): String {
+    fun sanitize(path: String) = filenameToMountStem(File(path).nameWithoutExtension)
+
     if (diskLabel != null && isValidLabelStem(diskLabel)) {
         val labelConflict = allLabels.any { (path, label) ->
             path != imagePath && label != null && isValidLabelStem(label) && label == diskLabel
         }
         if (!labelConflict) return diskLabel
     }
-    fun sanitize(path: String) = filenameToMountStem(
-        File(path).nameWithoutExtension
-    )
 
     val sanitized = sanitize(imagePath)
-    val conflict = allImagePaths.any { it != imagePath && sanitize(it) == sanitized }
-    if (!conflict) return sanitized
+    if (allImagePaths.none { it != imagePath && sanitize(it) == sanitized }) return sanitized
+
     val h = File(imagePath).nameWithoutExtension.hashCode().toUInt()
     return String.format("%04X-%04X", (h.toInt() shr 16) and 0xFFFF, h.toInt() and 0xFFFF)
 }
 
-class MountManager(appContext: Context) {
+class MountManager(
+    appContext: Context,
+    private val rootsChangedNotifier: RootsChangedNotifier,
+) {
+    interface RootsChangedNotifier {
+        fun notify(context: Context)
+    }
+
     private val ctx = appContext.applicationContext
     val mountsDir: String = File(ctx.filesDir, "mounts").apply { mkdirs() }.absolutePath
+
+    private val mountMutex = Mutex()
     private val maxMounts = 10
     private var busyboxBin = ""
 
@@ -124,189 +148,27 @@ class MountManager(appContext: Context) {
     )
     val envStatus: StateFlow<EnvironmentStatus> = _envStatus.asStateFlow()
 
-    fun checkEnvironment(): EnvironmentStatus {
-        val (status, bb) = checkEnv(ctx)
-        busyboxBin = bb
-        _envStatus.value = status
-        return status
-    }
+    private fun fail(resId: Int, vararg args: Any) =
+        MountResult.Failure(ctx.getString(resId, *args))
 
-    fun refreshMountedImages() {
-        val r = RootShell.cmd(
-            "grep",
-            ShellArg.literal("-F"),
-            ShellArg.of("$mountsDir/"),
-            pathArg("/proc/mounts"),
-            ignoreError = true
-        )
-        L.d("MountManager", "refreshMountedImages: grep exit=${r.exitCode}, output blank=${r.output.isBlank()}")
-        L.d("MountManager", "Filtered /proc/mounts output:\n${r.output}")
-        _mountedImages.value = if (r.exitCode != 0 || r.output.isBlank()) {
-            L.d("MountManager", "No entries found in /proc/mounts matching $mountsDir/")
-            emptyList()
-        } else {
-            val parsed = r.output.lineSequence().mapNotNull { line ->
-                val p = line.trim().split(Regex("\\s+"))
-                val device = p.getOrNull(0) ?: "null"
-                val mountPoint = p.getOrNull(1) ?: "null"
-                val fsTypeStr = p.getOrNull(2) ?: "null"
-                val fs = p.getOrNull(2)?.let { FS_LIST[it] }
-                when {
-                    p.size < 3 -> {
-                        L.d("MountManager", "  SKIP: $line | Reason: not enough fields (${p.size} < 3)")
-                        null
-                    }
-                    fs == null -> {
-                        L.d("MountManager", "  SKIP: $line | Reason: unknown fs type '$fsTypeStr'")
-                        null
-                    }
-                    "loop" !in device -> {
-                        L.d("MountManager", "  SKIP: $line | Reason: not a loop device (device='$device')")
-                        null
-                    }
-                    else -> {
-                        L.d("MountManager", "  PARSE: $line | device=$device, mp=$mountPoint, fs=$fsTypeStr")
-                        MountedImage(device, mountPoint, device, fs)
-                    }
-                }
-            }.distinctBy { "${it.mountPoint}|${it.loopDevice}|${it.devicePath}" }
-                .sortedBy { it.mountPoint }.toList()
-            L.d("MountManager", "Final mounted images count: ${parsed.size}")
-            parsed.forEach { img ->
-                L.d("MountManager", "  Mounted: ${img.mountPoint} (${img.fsType.mountType})")
-            }
-            parsed
-        }
-    }
+    private fun bindFail(resId: Int, vararg args: Any) =
+        BindResult.Failure(ctx.getString(resId, *args))
 
-    fun mountImage(
-        path: String, mode: MountMode = MountMode.LOCAL, mountDirName: String? = null
-    ): OpResult {
-        if (!_envStatus.value.ready) return OpResult.failure(Exception(ctx.getString(R.string.error_env_not_ready)))
-        refreshMountedImages()
-        if (_mountedImages.value.size >= maxMounts) return OpResult.failure(
-            Exception(
-                ctx.getString(
-                    R.string.error_mount_limit_reached, maxMounts
-                )
-            )
-        )
+    private fun requireEnvReady(): MountResult.Failure? =
+        if (!_envStatus.value.ready) fail(R.string.error_env_not_ready) else null
 
-        val imagePath = path.trim()
-        if (imagePath.isBlank()) return OpResult.failure(Exception(ctx.getString(R.string.error_empty_path)))
-        val isIso = imagePath.endsWith(".iso", ignoreCase = true)
-        if (!imagePath.endsWith(".img", ignoreCase = true) && !isIso) return OpResult.failure(
-            Exception(ctx.getString(R.string.error_only_img_iso_supported))
-        )
-        val imageFile = File(imagePath)
-        if (!imageFile.exists()) return OpResult.failure(
-            Exception(
-                ctx.getString(
-                    R.string.error_image_not_found, imagePath
-                )
-            )
-        )
-        if (!validatePath(imagePath)) return OpResult.failure(Exception(ctx.getString(R.string.error_image_path_invalid_chars)))
+    private fun requireMountCapacity(): MountResult.Failure? =
+        if (_mountedImages.value.size >= maxMounts) fail(
+            R.string.error_mount_limit_reached, maxMounts
+        ) else null
 
-        val imgArg = pathArg(imagePath)
-
-        // reject sparse images, not attempted for now (skip for ISOs)
-        if (!isIso && RootShell.cmd(
-                "hexdump",
-                ShellArg.literal("-C"),
-                ShellArg.literal("-n"),
-                ShellArg.literal("20000"),
-                imgArg,
-                busyboxBin = busyboxBin,
-                pipeInto = ShellCmd.of("grep", ShellArg.of("3a ff 26 ed"))
-            ).let { it.exitCode == 0 && it.output.isNotBlank() }
-        ) return OpResult.failure(Exception(ctx.getString(R.string.error_sparse_not_supported)))
-
-        val fsType: FsType
-        try {
-            fsType = detectFilesystem(ctx, imagePath, busyboxBin) ?: run {
-                L.w("MountManager", "fs detection failed for $imagePath (${imageFile.length()} bytes)")
-                return OpResult.failure(Exception(ctx.getString(R.string.error_unsupported_filesystem)))
-            }
-        } catch (e: PartitionedImageException) {
-            L.d("MountManager", "Partitioned image detected for $imagePath")
-            val withFs =
-                probePartitionFilesystems(ctx, imagePath, e.tableInfo.partitions, busyboxBin)
-            _pendingPartitionResult = PartitionedImageResult(e.tableInfo, withFs)
-            return OpResult.failure(e)
-        }
-        L.d("MountManager", "Detected: ${fsType.mountType} for $imagePath")
-        return mountCheckedImage(imagePath, imageFile, fsType, mode, mountDirName)
-    }
-
-    // mount a partition from a partitioned disk image (called after user picks one)
-    fun mountPartition(
-        path: String,
-        partition: PartitionEntry,
-        mode: MountMode = MountMode.LOCAL,
-        mountDirName: String? = null,
-    ): OpResult {
-        if (!_envStatus.value.ready) return OpResult.failure(Exception(ctx.getString(R.string.error_env_not_ready)))
-        refreshMountedImages()
-        if (_mountedImages.value.size >= maxMounts) return OpResult.failure(
-            Exception(
-                ctx.getString(
-                    R.string.error_mount_limit_reached, maxMounts
-                )
-            )
-        )
-        val imagePath = path.trim()
-        val imageFile = File(imagePath)
-        val fsType = partition.detectedFs ?: return OpResult.failure(
-            Exception(
-                ctx.getString(
-                    R.string.error_no_fs_on_partition, partition.index
-                )
-            )
-        )
-        val stem = mountDirName
-            ?: filenameToMountStem(imageFile.nameWithoutExtension + "_p${partition.index}")
-        return performMount(
-            imagePath, stem, fsType, mode, partition.offsetBytes, partition.sizeBytes
-        )
-    }
-
-    // holds the partition table from the last PartitionedImageException
-    private var _pendingPartitionResult: PartitionedImageResult? = null
-    val pendingPartitionResult: PartitionedImageResult? get() = _pendingPartitionResult
-
-    // probe partition table and detect filesystems for each partition (for re-mounting with stored selection)
-    fun probePartitions(path: String): PartitionedImageResult? {
-        val table = probePartitionTable(ctx, path, busyboxBin) ?: return null
-        val withFs = probePartitionFilesystems(ctx, path, table.partitions, busyboxBin)
-        return PartitionedImageResult(table, withFs)
-    }
-
-    private fun attachedLoopDevicesForImage(imagePath: String): List<String> {
-        val imgArg = pathArg(imagePath)
-        val r = RootShell.cmd(
-            "losetup",
-            ShellArg.literal("-a"),
-            busyboxBin = busyboxBin,
-            suppressErr = true,
-            pipeInto = ShellCmd.of("grep", ShellArg.literal("-F"), imgArg)
-        )
-        if (r.exitCode != 0 || r.output.isBlank()) return emptyList()
-        return r.output.lineSequence().mapNotNull { line ->
-            val dev = line.substringBefore(':').trim()
-            if (dev.matches(Regex("^/dev/(block/)?loop\\d+$"))) dev else null
-        }.distinct().toList()
-    }
-
-    private fun isLoopMounted(loopDevice: String): Boolean {
-        return RootShell.cmd(
-            "grep",
-            ShellArg.literal("-qF"),
-            ShellArg.of("$loopDevice "),
-            pathArg("/proc/mounts"),
-            busyboxBin = busyboxBin
-        ).exitCode == 0
-    }
+    private fun isMountedAt(mountPoint: String): Boolean = RootShell.cmd(
+        "grep",
+        ShellArg.literal("-qF"),
+        ShellArg.of(" $mountPoint "),
+        pathArg("/proc/mounts"),
+        busyboxBin = busyboxBin
+    ).exitCode == 0
 
     private fun detachLoop(loopDevice: String) {
         RootShell.cmd(
@@ -319,41 +181,366 @@ class MountManager(appContext: Context) {
         )
     }
 
-    private fun cleanupStaleLoopsForImage(imagePath: String) {
-        attachedLoopDevicesForImage(imagePath).forEach { loop ->
-            if (!isLoopMounted(loop)) {
-                L.w("MountManager", "Detaching stale loop for image: $loop -> $imagePath")
+    private fun attachedLoops(imagePath: String): List<String> {
+        val r = RootShell.cmd(
+            "losetup",
+            ShellArg.literal("-a"),
+            busyboxBin = busyboxBin,
+            suppressErr = true,
+            pipeInto = ShellCmd.of("grep", ShellArg.literal("-F"), pathArg(imagePath))
+        )
+        if (r.exitCode != 0 || r.output.isBlank()) return emptyList()
+        return r.output.lineSequence().mapNotNull { line ->
+            line.substringBefore(':').trim()
+                .takeIf { it.matches(Regex("^/dev/(block/)?loop\\d+$")) }
+        }.distinct().toList()
+    }
+
+    private fun detachStaleLoops(imagePath: String) {
+        attachedLoops(imagePath).forEach { loop ->
+            val mounted = RootShell.cmd(
+                "grep",
+                ShellArg.literal("-qF"),
+                ShellArg.of("$loop "),
+                pathArg("/proc/mounts"),
+                busyboxBin = busyboxBin
+            ).exitCode == 0
+            if (!mounted) {
+                L.w(TAG, "Detaching stale loop $loop for $imagePath")
                 detachLoop(loop)
             }
         }
     }
 
-    private fun mountCheckedImage(
-        imagePath: String,
-        imageFile: File,
-        fsType: FsType,
-        mode: MountMode,
-        mountDirName: String?,
-    ): OpResult {
-        L.d("MountManager", "mountCheckedImage: checking if image already loop-attached: $imagePath")
+    suspend fun checkEnvironment(): EnvironmentStatus = mountMutex.withLock {
+        val (status, bb) = checkEnv(ctx)
+        busyboxBin = bb
+        _envStatus.value = status
+        return status
+    }
 
-        val loops = attachedLoopDevicesForImage(imagePath)
-        L.d("MountManager", "Attached loops for image: ${loops.joinToString(", ").ifBlank { "none" }}")
-        if (loops.isNotEmpty()) {
-            val mountedLoop = loops.firstOrNull { isLoopMounted(it) }
-            if (mountedLoop != null) {
-                L.w("MountManager", "Image already mounted via loop: $mountedLoop")
-                refreshMountedImages()
-                return OpResult.failure(Exception(ctx.getString(R.string.error_image_already_mounted)))
+    val busyboxPath: String
+        get() = busyboxBin
+
+    private fun readMountedImages(): List<MountedImage> {
+        val r = RootShell.cmd(
+            "grep",
+            ShellArg.literal("-F"),
+            ShellArg.of("$mountsDir/"),
+            pathArg("/proc/mounts"),
+            ignoreError = true
+        )
+        L.d(TAG, "readMountedImages: exit=${r.exitCode}, blank=${r.output.isBlank()}")
+
+        if (r.exitCode != 0 || r.output.isBlank()) {
+            L.d(TAG, "No mounts found under $mountsDir/")
+            return emptyList()
+        }
+
+        return r.output.lineSequence().mapNotNull { line ->
+            val p = line.trim().split(Regex("\\s+"))
+            val device = p.getOrNull(0)
+            val mountPoint = p.getOrNull(1)
+            val fsTypeStr = p.getOrNull(2)
+            val fs = fsTypeStr?.let { FS_LIST[it] }
+            when {
+                p.size < 3 ->
+                    L.d(TAG, "SKIP (fields=${p.size}): $line").let { null }
+                fs == null ->
+                    L.d(TAG, "SKIP (unknown fs '$fsTypeStr'): $line").let { null }
+                device == null || "loop" !in device ->
+                    L.d(TAG, "SKIP (not loop, device=$device): $line").let { null }
+                else ->
+                    MountedImage(device, mountPoint!!, fs)
+                        .also { L.d(TAG, "MOUNT: $mountPoint ($fsTypeStr)") }
             }
-            loops.forEach {
-                L.w("MountManager", "Stale loop detected; detaching: $it")
-                detachLoop(it)
+        }.distinctBy { "${it.mountPoint}|${it.loopDevice}" }
+            .sortedBy { it.mountPoint }
+            .toList()
+            .also { L.d(TAG, "Total mounted: ${it.size}") }
+    }
+
+    fun refreshMountedImages() {
+        _mountedImages.value = readMountedImages()
+    }
+
+    suspend fun mountImage(
+        path: String,
+        mode: MountMode = MountMode.LOCAL,
+        mountDirName: String? = null,
+    ): MountResult = mountMutex.withLock {
+        requireEnvReady()?.let { return it }
+        refreshMountedImages()
+        requireMountCapacity()?.let { return it }
+
+        val imagePath = path.trim()
+        if (imagePath.isBlank()) return fail(R.string.error_empty_path)
+
+        val isIso = imagePath.endsWith(".iso", ignoreCase = true)
+        if (!imagePath.endsWith(".img", ignoreCase = true) && !isIso)
+            return fail(R.string.error_only_img_iso_supported)
+
+        val imageFile = File(imagePath)
+        if (!imageFile.exists()) return fail(R.string.error_image_not_found, imagePath)
+        if (!validatePath(imagePath)) return fail(R.string.error_image_path_invalid_chars)
+
+        // Sparse ext4 images (identified by magic bytes at offset ~0x1000) cannot be
+        // loop-mounted without first being converted to raw. We reject them early rather
+        // than letting the kernel mount fail with a cryptic error.
+        if (!isIso && isSparseImage(imagePath)) return fail(R.string.error_sparse_not_supported)
+
+        val fsType = try {
+                detectFilesystem(ctx, imagePath, busyboxBin) ?: run {
+                L.w(TAG, "fs detection failed for $imagePath (${imageFile.length()} bytes)")
+                return fail(R.string.error_unsupported_filesystem)
+            }
+        } catch (e: PartitionedImageException) {
+            L.d(TAG, "Partitioned image detected: $imagePath")
+            val partResult = PartitionedImageResult(
+                e.tableInfo,
+                probePartitionFilesystems(ctx, imagePath, e.tableInfo.partitions, busyboxBin)
+            )
+            return MountResult.PartitionedImage(partResult)
+        }
+
+        L.d(TAG, "Detected fs=${fsType.mountType} for $imagePath")
+
+        val loops = attachedLoops(imagePath)
+        if (loops.isNotEmpty()) {
+            val mountedLoop = loops.firstOrNull { loop ->
+                RootShell.cmd(
+                    "grep",
+                    ShellArg.literal("-qF"),
+                    ShellArg.of("$loop "),
+                    pathArg("/proc/mounts"),
+                    busyboxBin = busyboxBin
+                ).exitCode == 0
+            }
+            if (mountedLoop != null) {
+                L.w(TAG, "Image already mounted via $mountedLoop")
+                refreshMountedImages()
+                return fail(R.string.error_image_already_mounted)
+            }
+            loops.forEach { L.w(TAG, "Stale loop $it — detaching"); detachLoop(it) }
+        }
+
+        val stem = sanitizeStem(
+            mountDirName ?: filenameToMountStem(imageFile.nameWithoutExtension)
+        )
+        return performMount(imagePath, stem, fsType, mode)
+    }
+
+    suspend fun mountPartition(
+        path: String,
+        partition: PartitionEntry,
+        mode: MountMode = MountMode.LOCAL,
+        mountDirName: String? = null,
+    ): MountResult = mountMutex.withLock {
+        requireEnvReady()?.let { return it }
+        refreshMountedImages()
+        requireMountCapacity()?.let { return it }
+
+        val imagePath = path.trim()
+        if (!validatePath(imagePath)) return fail(R.string.error_image_path_invalid_chars)
+
+        val fsType = partition.detectedFs
+            ?: return fail(R.string.error_no_fs_on_partition, partition.index)
+        val stem = sanitizeStem(
+            mountDirName
+                ?: filenameToMountStem(File(imagePath).nameWithoutExtension + "_p${partition.index}")
+        )
+
+        return performMount(imagePath, stem, fsType, mode, partition.offsetBytes, partition.sizeBytes)
+    }
+
+    fun probePartitions(path: String): PartitionedImageResult? {
+        val table = probePartitionTable(ctx, path, busyboxBin) ?: return null
+        return PartitionedImageResult(
+            table,
+            probePartitionFilesystems(ctx, path, table.partitions, busyboxBin)
+        )
+    }
+
+    suspend fun unmountImage(item: MountedImage): MountResult = mountMutex.withLock {
+        if (!item.mountPoint.startsWith("$mountsDir/"))
+            return fail(R.string.error_invalid_mount_point)
+        if (!validatePath(item.mountPoint) || !validatePath(item.loopDevice))
+            return fail(R.string.error_path_invalid_chars)
+
+        val mpArg = pathArg(item.mountPoint)
+
+        if (item.fsType.posixPermissions) {
+            restorePermissions(item.mountPoint, busyboxBin).onFailure {
+                L.w(TAG, "restorePermissions failed for ${item.mountPoint}: ${it.message}")
             }
         }
-        val stem = mountDirName ?: filenameToMountStem(imageFile.nameWithoutExtension)
-        L.d("MountManager", "mountCheckedImage: proceeding with performMount for stem=$stem, fsType=${fsType.mountType}, mode=$mode")
-        return performMount(imagePath, stem, fsType, mode)
+
+        RootShell.cmd(
+            "fuser", ShellArg.literal("-km"), mpArg,
+            busyboxBin = busyboxBin, suppressErr = true, ignoreError = true
+        )
+
+        val umountOk = RootShell.cmd("umount", mpArg, busyboxBin = busyboxBin).exitCode == 0
+                || RootShell.cmd("umount", mpArg).exitCode == 0
+        if (!umountOk) {
+            L.e(TAG, "Failed to unmount ${item.mountPoint}")
+            return fail(R.string.error_unmount_failed)
+        }
+
+        val loopDetached = runCatching { detachLoop(item.loopDevice) }
+        if (loopDetached.isFailure) {
+            L.w(TAG, "Loop detach failed for ${item.loopDevice}: ${loopDetached.exceptionOrNull()?.message}")
+        }
+
+        RootShell.cmd("rmdir", mpArg, suppressErr = true, ignoreError = true)
+        refreshMountedImages()
+        rootsChangedNotifier.notify(ctx)
+        return MountResult.Unmounted(item.mountPoint)
+    }
+
+    fun formatImage(path: String, fsType: String = "ext4"): OpResult =
+        formatImage(ctx, path, _envStatus.value.ready, busyboxBin, fsType)
+
+    suspend fun createStorageBind(
+        stem: String,
+        bindDir: String? = null,
+        directMount: Boolean = false,
+    ): BindResult = mountMutex.withLock {
+        requireEnvReadyBind()?.let { return it }
+        bindDir ?: return bindFail(R.string.error_bind_dir_not_specified)
+
+        val rbd = resolveAndValidateBindDir(bindDir)
+            ?: return bindFail(R.string.error_bind_dir_rejected)
+
+        val safeStem = sanitizeStem(stem)
+        val source = "$mountsDir/$safeStem"
+        val target = if (directMount) rbd else "$rbd/$safeStem"
+
+        if (!validatePath(source) || !validatePath(target) || !validatePath(rbd))
+            return bindFail(R.string.error_path_invalid_chars)
+
+        val tgtArg = pathArg(target)
+        val dirArg = pathArg(rbd)
+
+        val mkdirDir = RootShell.cmd(
+            "mkdir", ShellArg.literal("-p"), dirArg,
+            chain = ShellCmd.chain(
+                ShellCmd.of("chown", ShellArg.literal("1023:1023"), dirArg),
+                ShellCmd.of("chmod", enumArg("775", VALID_CHMOD_MODES), dirArg)
+            )
+        )
+        if (mkdirDir.exitCode != 0) {
+            L.e(TAG, "Failed to create storage dir: $rbd")
+            return bindFail(R.string.error_failed_create_storage_dir, rbd)
+        }
+
+        if (isMountedAt(target)) return BindResult.AlreadyExposed(target)
+
+        if (directMount) {
+            val ls = RootShell.cmd("ls", ShellArg.literal("-A"), tgtArg, suppressErr = true)
+            if (ls.exitCode == 0 && ls.output.isNotBlank())
+                return bindFail(R.string.dialog_bind_nonempty, target)
+        }
+
+        val mkdirTgt = RootShell.cmd(
+            "mkdir", ShellArg.literal("-p"), tgtArg,
+            chain = ShellCmd.chain(
+                ShellCmd.of("chown", ShellArg.literal("1023:1023"), tgtArg),
+                ShellCmd.of("chmod", enumArg("775", VALID_CHMOD_MODES), tgtArg)
+            )
+        )
+        if (mkdirTgt.exitCode != 0) {
+            L.e(TAG, "Failed to create mount point dir: $target")
+            return bindFail(R.string.error_failed_create_mount_point_dir, target)
+        }
+
+        val r = RootShell.cmd(
+            "mount", ShellArg.literal("--bind"), pathArg(source), tgtArg, redirectErr = true
+        )
+        if (r.exitCode != 0) {
+            L.e(TAG, "Bind mount failed ($target): ${r.output}")
+            return bindFail(R.string.error_bind_mount_failed, r.output)
+        }
+
+        RootShell.cmd(
+            "chcon", ShellArg.literal("-R"),
+            secontextArg("u:object_r:media_rw_data_file:s0"), tgtArg,
+            suppressErr = true, ignoreError = true
+        )
+        return BindResult.Exposed(target)
+    }
+
+    suspend fun removeStorageBind(
+        stem: String,
+        bindDir: String? = null,
+        directMount: Boolean = false,
+    ): BindResult = mountMutex.withLock {
+        bindDir ?: return BindResult.Skipped
+
+        val rbd = resolveAndValidateBindDir(bindDir)
+            ?: return bindFail(R.string.error_bind_dir_rejected)
+
+        val target = if (directMount) rbd else "$rbd/${sanitizeStem(stem)}"
+        if (!validatePath(target)) return bindFail(R.string.error_path_invalid_chars)
+
+        val tgtArg = pathArg(target)
+        if (isMountedAt(target)) {
+            RootShell.cmd("umount", tgtArg, suppressErr = true, ignoreError = true)
+        }
+        RootShell.cmd("rmdir", tgtArg, suppressErr = true, ignoreError = true)
+        return BindResult.Removed(target)
+    }
+
+    private fun requireEnvReadyBind(): BindResult.Failure? =
+        if (!_envStatus.value.ready) BindResult.Failure(ctx.getString(R.string.error_env_not_ready)) else null
+
+    /**
+     * detects sparse ext4 images via the ext4 superblock magic (0xEF53) at byte offset 0x438, reads only 2KB
+     */
+    private fun isSparseImage(imagePath: String): Boolean {
+        // Detect Android sparse image magic 0xED26FF3A (hexdump prints little-endian bytes as "3a ff 26 ed").
+        // Read only the first 2KB since the magic is within that range.
+        return RootShell.cmd(
+            "hexdump",
+            ShellArg.literal("-C"),
+            ShellArg.literal("-n"),
+            ShellArg.literal("2048"),
+            pathArg(imagePath),
+            busyboxBin = busyboxBin,
+            pipeInto = ShellCmd.of("grep", ShellArg.of("3a ff 26 ed"))
+        ).let { it.exitCode == 0 && it.output.isNotBlank() }
+    }
+
+    /**
+     * canonicalizes and double-checks [bindDir] against [validateBindDir] to detect symlink
+     * races between the two resolutions. Returns null if the path is rejected at any stage.
+     */
+    private fun resolveAndValidateBindDir(bindDir: String): String? {
+        if (validateBindDir(ctx, bindDir) != null) {
+            L.w(TAG, "bindDir rejected before canonicalization: $bindDir")
+            return null
+        }
+        val resolved = try {
+            File(bindDir).canonicalPath
+        } catch (e: Exception) {
+            L.e(TAG, "canonicalPath failed for $bindDir: ${e.message}")
+            return null
+        }
+        if (validateBindDir(ctx, resolved) != null) {
+            L.w(TAG, "bindDir rejected after canonicalization: $resolved")
+            return null
+        }
+        val verified = try {
+            File(resolved).canonicalPath
+        } catch (e: Exception) {
+            L.e(TAG, "re-resolve failed for $resolved: ${e.message}")
+            return null
+        }
+        if (verified != resolved) {
+            L.e(TAG, "bindDir changed between resolutions — possible symlink race: $bindDir")
+            return null
+        }
+        return resolved
     }
 
     private fun performMount(
@@ -363,239 +550,38 @@ class MountManager(appContext: Context) {
         mode: MountMode,
         partOffset: Long = 0,
         partSize: Long = 0,
-    ): OpResult {
+    ): MountResult {
         val mp = "$mountsDir/$stem"
+        if (isMountedAt(mp)) {
+            refreshMountedImages()
+            return MountResult.AlreadyMounted(mp)
+        }
+
         val opts = buildMountOpts(fsType, mode)
-        // already mounted at this mount point?
-        // instead of parsing its own output, check /proc/mounts directly for the mount point
-        val isMounted = RootShell.cmd(
-            "grep",
-            ShellArg.literal("-qF"),
-            ShellArg.of(" $mp "),
-            pathArg("/proc/mounts"),
-            busyboxBin = busyboxBin
-        )
-        if (isMounted.exitCode == 0) {
-            refreshMountedImages()
-            return OpResult.success("Already mounted at $mp")
-        }
         val result = doMount(ctx, imagePath, mp, fsType, opts, busyboxBin, partOffset, partSize)
+
         if (result.isSuccess) {
-            val verify = RootShell.cmd(
-                "grep",
-                ShellArg.literal("-qF"),
-                ShellArg.of(" $mp "),
-                pathArg("/proc/mounts"),
-                busyboxBin = busyboxBin
-            )
-            if (verify.exitCode != 0) {
-                cleanupStaleLoopsForImage(imagePath)
-                return OpResult.failure(Exception(ctx.getString(R.string.error_mount_not_visible)))
+            if (!isMountedAt(mp)) {
+                L.e(TAG, "Mount reported success but $mp absent from /proc/mounts")
+                detachStaleLoops(imagePath)
+                return fail(R.string.error_mount_not_visible)
             }
-            if (fsType.posixPermissions) makeAccessible(mp, mountsDir, busyboxBin)
+            if (fsType.posixPermissions) {
+                makeAccessible(mp, mountsDir, busyboxBin).onFailure {
+                    L.w(TAG, "makeAccessible failed for $mp: ${it.message}")
+                }
+            }
             refreshMountedImages()
-            ImageProvider.notifyRootsChanged(ctx)
+            rootsChangedNotifier.notify(ctx)
+            return MountResult.Mounted(mp)
         }
-        return result
+
+        L.e(TAG, "doMount failed for $imagePath -> $mp: ${result.exceptionOrNull()?.message}")
+        val cause = result.exceptionOrNull()?.message ?: ""
+        return MountResult.Failure(ctx.getString(R.string.error_mount_failed_output, if (cause.isNotBlank()) cause else "unknown"))
     }
 
-    fun unmountImage(item: MountedImage): OpResult {
-        if (!item.mountPoint.startsWith("$mountsDir/")) return OpResult.failure(
-            Exception(
-                ctx.getString(
-                    R.string.error_invalid_mount_point
-                )
-            )
-        )
-        if (!validatePath(item.mountPoint) || !validatePath(item.loopDevice)) return OpResult.failure(
-            Exception(ctx.getString(R.string.error_path_invalid_chars))
-        )
-        val mpArg = pathArg(item.mountPoint)
-        val loopArg = loopDevArg(item.loopDevice)
-        if (item.fsType.posixPermissions) restorePermissions(item.mountPoint, busyboxBin)
-        RootShell.cmd(
-            "fuser",
-            ShellArg.literal("-km"),
-            mpArg,
-            busyboxBin = busyboxBin,
-            suppressErr = true,
-            ignoreError = true
-        )
-        // try busybox umount first, then system umount
-        val umountResult = RootShell.cmd("umount", mpArg, busyboxBin = busyboxBin)
-        if (umountResult.exitCode != 0) {
-            val fallback = RootShell.cmd("umount", mpArg)
-            if (fallback.exitCode != 0) return OpResult.failure(Exception(ctx.getString(R.string.error_unmount_failed)))
-        }
-        RootShell.cmd(
-            "losetup",
-            ShellArg.literal("-d"),
-            loopArg,
-            busyboxBin = busyboxBin,
-            suppressErr = true,
-            ignoreError = true
-        )
-        RootShell.cmd("rmdir", mpArg, suppressErr = true, ignoreError = true)
-        refreshMountedImages()
-        ImageProvider.notifyRootsChanged(ctx)
-        return OpResult.success("Unmounted ${item.mountPoint}")
-    }
-
-    fun formatImage(path: String, fsType: String = "ext4"): OpResult =
-        formatImage(ctx, path, _envStatus.value.ready, busyboxBin, fsType)
-
-    fun createStorageBind(
-        stem: String, bindDir: String? = null, directMount: Boolean = false
-    ): OpResult {
-        if (!_envStatus.value.ready) return OpResult.failure(Exception(ctx.getString(R.string.error_env_not_ready)))
-        val targetBindDir = bindDir
-            ?: return OpResult.failure(Exception(ctx.getString(R.string.error_bind_dir_not_specified)))
-        validateBindDir(ctx, targetBindDir)?.let { return OpResult.failure(Exception(it)) }
-        val resolvedBindDir = try {
-            File(targetBindDir).canonicalPath
-        } catch (e: Exception) {
-            return OpResult.failure(
-                Exception(
-                    ctx.getString(
-                        R.string.error_resolve_bind_dir, e.message ?: ""
-                    )
-                )
-            )
-        }
-        validateBindDir(ctx, resolvedBindDir)?.let {
-            return OpResult.failure(Exception(ctx.getString(R.string.error_bind_dir_rejected, it)))
-        }
-        val verifiedBindDir = try {
-            File(targetBindDir).canonicalPath
-        } catch (_: Exception) {
-            return OpResult.failure(Exception(ctx.getString(R.string.error_path_changed_validation)))
-        }
-        if (verifiedBindDir != resolvedBindDir) {
-            return OpResult.failure(Exception(ctx.getString(R.string.error_bind_path_changed)))
-        }
-        val safeStem = sanitizeStem(stem)
-        val source = "$mountsDir/$safeStem"
-        val target = if (directMount) resolvedBindDir else "$resolvedBindDir/$safeStem"
-        if (!validatePath(source) || !validatePath(target) || !validatePath(resolvedBindDir)) return OpResult.failure(
-            Exception(ctx.getString(R.string.error_path_invalid_chars))
-        )
-        val srcArg = pathArg(source)
-        val tgtArg = pathArg(target)
-        val dirArg = pathArg(resolvedBindDir)
-        // check if the parent directory exists with media_rw ownership so it's visible via FUSE
-        val mkdirDir = RootShell.cmd(
-            "mkdir", ShellArg.literal("-p"), dirArg, chain = ShellCmd.chain(
-                ShellCmd.of("chown", ShellArg.literal("1023:1023"), dirArg),
-                ShellCmd.of("chmod", enumArg("775", VALID_CHMOD_MODES), dirArg)
-            )
-        )
-        if (mkdirDir.exitCode != 0) return OpResult.failure(
-            Exception(
-                ctx.getString(
-                    R.string.error_failed_create_storage_dir, resolvedBindDir
-                )
-            )
-        )
-        // check if already bind-mounted
-        if (RootShell.cmd(
-                "grep", ShellArg.literal("-qF"), ShellArg.of(" $target "), pathArg("/proc/mounts")
-            ).exitCode == 0
-        ) return OpResult.success("Already exposed at $target")
-        if (directMount) {
-            val lsResult = RootShell.cmd(
-                "ls", ShellArg.literal("-A"), tgtArg, suppressErr = true
-            )
-            if (lsResult.exitCode == 0 && lsResult.output.isNotBlank()) {
-                return OpResult.failure(
-                    Exception(
-                        ctx.getString(
-                            R.string.dialog_bind_nonempty, target
-                        )
-                    )
-                )
-            }
-        }
-        // create mount point directory
-        val mkdirTgt = RootShell.cmd(
-            "mkdir", ShellArg.literal("-p"), tgtArg, chain = ShellCmd.chain(
-                ShellCmd.of("chown", ShellArg.literal("1023:1023"), tgtArg),
-                ShellCmd.of("chmod", enumArg("775", VALID_CHMOD_MODES), tgtArg)
-            )
-        )
-        if (mkdirTgt.exitCode != 0) return OpResult.failure(
-            Exception(
-                ctx.getString(
-                    R.string.error_failed_create_mount_point_dir, target
-                )
-            )
-        )
-        // bind mount
-        val r =
-            RootShell.cmd("mount", ShellArg.literal("--bind"), srcArg, tgtArg, redirectErr = true)
-        if (r.exitCode != 0) return OpResult.failure(
-            Exception(
-                ctx.getString(
-                    R.string.error_bind_mount_failed, r.output
-                )
-            )
-        )
-        // set SELinux context so media layer can traverse it
-        RootShell.cmd(
-            "chcon",
-            ShellArg.literal("-R"),
-            secontextArg("u:object_r:media_rw_data_file:s0"),
-            tgtArg,
-            suppressErr = true,
-            ignoreError = true
-        )
-        return OpResult.success("Exposed at $target")
-    }
-
-    // unmount a bind mount at [bindDir]/[stem] (or [bindDir] directly if directMount) and remove the empty directory
-    fun removeStorageBind(
-        stem: String, bindDir: String? = null, directMount: Boolean = false
-    ): OpResult {
-        val targetBindDir =
-            bindDir ?: return OpResult.success("Bind directory not specified, nothing to remove")
-        validateBindDir(ctx, targetBindDir)?.let { return OpResult.failure(Exception(it)) }
-        val resolvedBindDir = try {
-            File(targetBindDir).canonicalPath
-        } catch (e: Exception) {
-            return OpResult.failure(
-                Exception(
-                    ctx.getString(
-                        R.string.error_resolve_bind_dir, e.message ?: ""
-                    )
-                )
-            )
-        }
-        validateBindDir(ctx, resolvedBindDir)?.let {
-            return OpResult.failure(Exception(ctx.getString(R.string.error_bind_dir_rejected, it)))
-        }
-        // re-resolve to detect path manipulation between validation and use
-        val verifiedBindDir = try {
-            File(targetBindDir).canonicalPath
-        } catch (_: Exception) {
-            return OpResult.failure(Exception(ctx.getString(R.string.error_path_changed_validation)))
-        }
-        if (verifiedBindDir != resolvedBindDir) {
-            return OpResult.failure(Exception(ctx.getString(R.string.error_bind_path_changed)))
-        }
-        val safeStem = sanitizeStem(stem)
-        val target = if (directMount) resolvedBindDir else "$resolvedBindDir/$safeStem"
-        if (!validatePath(target)) return OpResult.failure(Exception(ctx.getString(R.string.error_path_invalid_chars)))
-        val tgtArg = pathArg(target)
-        // unmount if mounted
-        val isMounted = RootShell.cmd(
-            "grep", ShellArg.literal("-qF"), ShellArg.of(" $target "), pathArg("/proc/mounts")
-        )
-        if (isMounted.exitCode == 0) {
-            RootShell.cmd("umount", tgtArg, suppressErr = true, ignoreError = true)
-        }
-        // clean up empty directory
-        // for subdirectory mounts: remove the stem subdirectory
-        // for direct mounts: remove the folder only if it's now empty (safe post-unmount)
-        RootShell.cmd("rmdir", tgtArg, suppressErr = true, ignoreError = true)
-        return OpResult.success("Storage mount removed: $target")
+    companion object {
+        private const val TAG = "MountManager"
     }
 }

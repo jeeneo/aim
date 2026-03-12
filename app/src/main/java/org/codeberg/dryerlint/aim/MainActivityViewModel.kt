@@ -93,7 +93,14 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private val app: Application = application
-    val mountManager = MountManager(application)
+    val mountManager = MountManager(
+        application,
+        object : MountManager.RootsChangedNotifier {
+            override fun notify(context: Context) {
+                ImageProvider.notifyRootsChanged(context)
+            }
+        }
+    )
     private val mountedPartitionIndex = mutableMapOf<String, Int>()
     private val mountedStem = mutableMapOf<String, String>()
 
@@ -215,8 +222,10 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         }
         imagePath?.let { mountedBindState.remove(it) }
         val result = withContext(Dispatchers.IO) { mountManager.unmountImage(mountedImage) }
-        val error = result.exceptionOrNull() ?: return null
-        return errorText(error, app.getString(R.string.error_unmount_failed))
+        when (result) {
+            is MountResult.Failure -> return errorText(Exception(result.message), app.getString(R.string.error_unmount_failed))
+            else -> return null
+        }
     }
 
     private fun stemFor(
@@ -235,7 +244,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         imported: ImportedImage?,
         stem: String,
         displayName: String,
-    ): OpResult {
+    ): MountResult {
         val mode = modeFor(imported)
         val storedPart = imported?.selectedPartitionIndex
         return withContext(Dispatchers.IO) {
@@ -526,25 +535,24 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             val imported = allImported.find { it.path == img.path }
             val stem = stemFor(img.path, allImported)
             val result = mountOrPartitionMount(img.path, imported, stem, img.displayName)
-            result.onSuccess {
-                val part = imported?.selectedPartitionIndex
-                if (part != null) mountedPartitionIndex[img.path] = part
-                mountedStem[img.path] = stem
-            }
-                result.onFailure { e ->
-                if (e is PartitionedImageException) {
+            when (result) {
+                is MountResult.Mounted, is MountResult.AlreadyMounted, is MountResult.Unmounted -> {
+                    val part = imported?.selectedPartitionIndex
+                    if (part != null) mountedPartitionIndex[img.path] = part
+                    mountedStem[img.path] = stem
+                }
+                is MountResult.PartitionedImage -> {
                     if (imported?.hasPartitions != true) {
                         updateImportedImage(img.path) {
-                            it.copy(
-                                hasPartitions = true, selectedPartitionIndex = null
-                            )
+                            it.copy(hasPartitions = true, selectedPartitionIndex = null)
                         }
                     }
                     showPartitionDialog(img.path, img.displayName)
-                } else {
-                    L.e(TAG, "Mount failed: ${img.path}", e)
+                }
+                is MountResult.Failure -> {
+                    L.e(TAG, "Mount failed: ${img.path}")
                     errors += app.getString(
-                        R.string.error_op_mount, img.displayName, errorText(e)
+                        R.string.error_op_mount, img.displayName, errorText(Exception(result.message))
                     )
                 }
             }
@@ -582,25 +590,24 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             mountedPartitionIndex.remove(img.path)
             mountedStem.remove(img.path)
             val result = mountOrPartitionMount(img.path, imported, newStem, img.displayName)
-            result.onSuccess {
-                val part = imported?.selectedPartitionIndex
-                if (part != null) mountedPartitionIndex[img.path] = part
-                mountedStem[img.path] = newStem
-            }
-            result.onFailure { e ->
-                if (e is PartitionedImageException) {
+            when (result) {
+                is MountResult.Mounted, is MountResult.AlreadyMounted, is MountResult.Unmounted -> {
+                    val part = imported?.selectedPartitionIndex
+                    if (part != null) mountedPartitionIndex[img.path] = part
+                    mountedStem[img.path] = newStem
+                }
+                is MountResult.PartitionedImage -> {
                     if (imported?.hasPartitions != true) {
                         updateImportedImage(img.path) {
-                            it.copy(
-                                hasPartitions = true, selectedPartitionIndex = null
-                            )
+                            it.copy(hasPartitions = true, selectedPartitionIndex = null)
                         }
                     }
                     showPartitionDialog(img.path, img.displayName)
-                } else {
-                    L.e(TAG, "Remount failed: ${img.path}", e)
+                }
+                is MountResult.Failure -> {
+                    L.e(TAG, "Remount failed: ${img.path}")
                     errors += app.getString(
-                        R.string.error_op_remount, img.displayName, errorText(e)
+                        R.string.error_op_remount, img.displayName, errorText(Exception(result.message))
                     )
                 }
             }
@@ -633,17 +640,22 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     }
                     mountedBindState.remove(img.path)
                 }
-                withContext(Dispatchers.IO) {
+                val bindRes = withContext(Dispatchers.IO) {
                     mountManager.createStorageBind(
                         stem, imageBindDir, directMount = isCustomBindDir
                     )
-                }.onSuccess {
-                    mountedBindState[img.path] = BindState(imageBindDir, isCustomBindDir)
-                }.onFailure { e ->
-                    L.e(TAG, "Bind create failed: ${img.path}", e)
-                    errors += app.getString(
-                        R.string.error_op_bind, img.displayName, errorText(e)
-                    )
+                }
+                when (bindRes) {
+                    is BindResult.Exposed, is BindResult.AlreadyExposed -> {
+                        mountedBindState[img.path] = BindState(imageBindDir, isCustomBindDir)
+                    }
+                    is BindResult.Failure -> {
+                        L.e(TAG, "Bind create failed: ${img.path}")
+                        errors += app.getString(
+                            R.string.error_op_bind, img.displayName, errorText(Exception(bindRes.message))
+                        )
+                    }
+                    else -> { /* Skipped */ }
                 }
             } else {
                 val oldBind = mountedBindState[img.path]
@@ -658,7 +670,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private fun showPartitionDialog(imagePath: String, displayName: String) {
-        val pr = mountManager.pendingPartitionResult ?: return
+        val pr = mountManager.probePartitions(imagePath) ?: return
         val imported = loadImportedImages().find { it.path == imagePath }
         queuePartitions(
             PartitionState(
@@ -802,13 +814,13 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    private fun mountWithStoredPartition(
+    private suspend fun mountWithStoredPartition(
         path: String,
         partIndex: Int,
         mode: MountMode,
         stem: String,
         displayName: String,
-    ): OpResult {
+    ): MountResult {
         val pr = mountManager.probePartitions(path)
         if (pr == null) {
             updateImportedImage(path) {
@@ -830,7 +842,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     selectedPartitionIndex = null,
                 )
             )
-            return OpResult.failure(PartitionedImageException(pr.tableInfo))
+            return MountResult.PartitionedImage(pr)
         }
         return mountManager.mountPartition(path, partition, mode, stem)
     }
