@@ -26,8 +26,8 @@ android {
         applicationId = "org.codeberg.dryerlint.aim"
         minSdk = 30
         targetSdk = 36
-        versionCode = 106
-        versionName = "1.06"
+        versionCode = 107
+        versionName = "1.07"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
