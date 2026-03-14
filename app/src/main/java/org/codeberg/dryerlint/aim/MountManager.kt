@@ -115,9 +115,10 @@ fun generateMountStem(
     }
 
     val sanitized = sanitize(imagePath)
-    if (allImagePaths.none { it != imagePath && sanitize(it) == sanitized }) return sanitized
-
-    val h = File(imagePath).nameWithoutExtension.hashCode().toUInt()
+    val conflicts = allImagePaths.filter { sanitize(it) == sanitized }
+    if (conflicts.size <= 1) return sanitized
+    if (conflicts.first() == imagePath) return sanitized
+    val h = imagePath.hashCode().toUInt()
     return String.format("%04X-%04X", (h.toInt() shr 16) and 0xFFFF, h.toInt() and 0xFFFF)
 }
 

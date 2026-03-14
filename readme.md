@@ -37,6 +37,16 @@ Meant to be the phone equivalent of [MSD](https://github.com/chenxiaolong/MSD)
 > [!CAUTION]
 > This application runs as root and processes arbitrary user input to shell commands. This introduces security risks and while protective measures have been implemented to mitigate potential issues, no guarantees can be made. Use at your own risk.
 
+Note: if you use KernelSU or similar root solutions and you encounter issues, please set AIM to the following custom profile:
+
+`Mount namespace: global`
+
+`uid = 0, gid = 0`
+
+`Groups: system, root, app`
+
+`Capabilities: CHOWN, DAC_OVERRIDE, FOWNER, SYS_ADMIN`
+
 ## Usage
 
 1. Download latest version from the [releases page](https://codeberg.org/dryerlint/AIM/releases).

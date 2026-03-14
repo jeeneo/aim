@@ -69,11 +69,6 @@
     <string name="alert_unmount_before_format_failed">Unmount before format failed: %s</string>
     <string name="alert_path_validation_failed">Path failed validation</string>
     <string name="alert_format_failed">Format failed</string>
-    <!-- <plurals name="alert_partition_selected">
-        <item quantity="one">Partition %d selected. Press Apply to mount.</item>
-        <item quantity="other">Partitions %d selected. Press Apply to mount.</item>
-    </plurals> -->
-    <!-- <string name="alert_format_succeeded">Partitions %d selected. Press Apply to mount</string> -->
     <string name="alert_partition_selected">Partition %d selected.</string>
 
     <string name="alert_debug_mode_enabled">Debug logging enabled</string>
@@ -113,10 +108,7 @@
     <string name="error_path_invalid_chars">Path contains invalid characters</string>
     <string name="error_unmount_failed">Unmount failed</string>
     <string name="error_bind_dir_not_specified">Bind directory not specified</string>
-    <!-- <string name="error_resolve_bind_dir">Could not resolve bind directory: %s</string> -->
     <string name="error_bind_dir_rejected">Resolved bind directory rejected: %s</string>
-    <!-- <string name="error_path_changed_validation">Path changed during validation</string> -->
-    <!-- <string name="error_bind_path_changed">Bind directory path changed between validation and use</string> -->
     <string name="error_failed_create_storage_dir">Failed to create storage directory: %s</string>
     <string name="error_failed_create_mount_point_dir">Failed to create mount point: %s</string>
     <string name="error_bind_mount_failed">Bind mount failed: %s</string>

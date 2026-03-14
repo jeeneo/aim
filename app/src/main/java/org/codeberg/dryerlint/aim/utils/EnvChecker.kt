@@ -19,6 +19,7 @@ package org.codeberg.dryerlint.aim.utils
 
 import android.content.Context
 import org.codeberg.dryerlint.aim.EnvironmentStatus
+import org.codeberg.dryerlint.aim.L
 import org.codeberg.dryerlint.aim.R
 
 private val BUSYBOX_CANDIDATES = listOf(
