@@ -51,18 +51,25 @@ fun checkEnv(ctx: Context): Pair<EnvironmentStatus, String> {
         busyboxMessage = ctx.getString(R.string.env_busybox_skipped),
     ) to ""
     val busyboxPath = resolveBusyboxPath()
-    return if (busyboxPath != null) EnvironmentStatus(
-        rootAvailable = true,
-        rootMessage = ctx.getString(R.string.env_root_granted),
-        busyboxAvailable = true,
-        busyboxPath = busyboxPath,
-        busyboxMessage = ctx.getString(R.string.env_busybox_system_found),
-        ready = true
-    ) to busyboxPath
-    else EnvironmentStatus(
-        rootAvailable = true,
-        rootMessage = ctx.getString(R.string.env_root_granted),
-        busyboxMessage = ctx.getString(R.string.env_busybox_not_found),
-        ready = false
-    ) to ""
+    if (busyboxPath != null) {
+        val bbVersion = RootShell.cmd(busyboxPath, ShellArg.literal("--version")).output.lineSequence().firstOrNull()?.trim()
+        L.d("EnvChecker", "BusyBox version: $bbVersion")
+        val androidVersion = android.os.Build.VERSION.RELEASE
+        L.d("EnvChecker", "Android version: $androidVersion")
+        return EnvironmentStatus(
+            rootAvailable = true,
+            rootMessage = ctx.getString(R.string.env_root_granted),
+            busyboxAvailable = true,
+            busyboxPath = busyboxPath,
+            busyboxMessage = ctx.getString(R.string.env_busybox_system_found),
+            ready = true
+        ) to busyboxPath
+    } else {
+        return EnvironmentStatus(
+            rootAvailable = true,
+            rootMessage = ctx.getString(R.string.env_root_granted),
+            busyboxMessage = ctx.getString(R.string.env_busybox_not_found),
+            ready = false
+        ) to ""
+    }
 }

@@ -30,7 +30,6 @@
 -keep class org.codeberg.dryerlint.aim.utils.ShellArg { *; }
 -keep class org.codeberg.dryerlint.aim.utils.RootShell { *; }
 
-# Keep common logging APIs and methods.
 -keep class android.util.Log { *; }
 -keep class java.util.logging.** { *; }
 -keepclassmembers class android.util.Log {
