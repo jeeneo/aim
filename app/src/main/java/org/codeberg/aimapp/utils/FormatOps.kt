@@ -15,13 +15,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim.utils
+package org.codeberg.aimapp.utils
 
 import android.annotation.SuppressLint
 import android.content.Context
-import org.codeberg.dryerlint.aim.L
-import org.codeberg.dryerlint.aim.OpResult
-import org.codeberg.dryerlint.aim.R
+import org.codeberg.aimapp.L
+import org.codeberg.aimapp.OpResult
+import org.codeberg.aimapp.R
 import java.io.File
 import java.nio.file.Files
 

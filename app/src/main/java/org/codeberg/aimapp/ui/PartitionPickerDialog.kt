@@ -15,7 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim.ui
+package org.codeberg.aimapp.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -47,9 +47,9 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import org.codeberg.dryerlint.aim.R
-import org.codeberg.dryerlint.aim.utils.PartitionEntry
-import org.codeberg.dryerlint.aim.utils.PartitionScheme
+import org.codeberg.aimapp.R
+import org.codeberg.aimapp.utils.PartitionEntry
+import org.codeberg.aimapp.utils.PartitionScheme
 
 private fun formatSize(bytes: Long): String = when {
     bytes < 1024 -> "$bytes B"

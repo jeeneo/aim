@@ -17,7 +17,7 @@
 
 @file:Suppress("AssignedValueIsNeverRead")
 
-package org.codeberg.dryerlint.aim.ui
+package org.codeberg.aimapp.ui
 
 import android.content.res.ColorStateList
 import androidx.compose.foundation.clickable
@@ -57,7 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.android.material.materialswitch.MaterialSwitch
-import org.codeberg.dryerlint.aim.R
+import org.codeberg.aimapp.R
 
 @Composable
 fun PreferenceCategory(

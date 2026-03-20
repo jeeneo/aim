@@ -19,12 +19,12 @@
 // decisive decision to implement custom parsing logic cause it's uhhh yeah (T^T)
 // 1) parsing logic is hard 2) why add a new binary requirement?
 
-package org.codeberg.dryerlint.aim.utils
+package org.codeberg.aimapp.utils
 
 import android.content.Context
-import org.codeberg.dryerlint.aim.FsType
-import org.codeberg.dryerlint.aim.L
-import org.codeberg.dryerlint.aim.R
+import org.codeberg.aimapp.FsType
+import org.codeberg.aimapp.L
+import org.codeberg.aimapp.R
 
 private const val TAG = "PartitionTable"
 private val PARTITION_TYPE_NAMES = mapOf(

@@ -17,7 +17,7 @@
 
 @file:Suppress("SpellCheckingInspection", "AssignedValueIsNeverRead")
 
-package org.codeberg.dryerlint.aim
+package org.codeberg.aimapp
 
 import android.annotation.SuppressLint
 import android.net.Uri
@@ -65,13 +65,13 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.suspendCancellableCoroutine
-import org.codeberg.dryerlint.aim.ui.BindDirDialog
-import org.codeberg.dryerlint.aim.ui.ImageOptionsDialog
-import org.codeberg.dryerlint.aim.ui.PartitionPickerDialog
-import org.codeberg.dryerlint.aim.ui.PreferenceCategory
-import org.codeberg.dryerlint.aim.ui.PreferenceItem
-import org.codeberg.dryerlint.aim.ui.SwitchPreferenceItem
-import org.codeberg.dryerlint.aim.ui.theme.AimTheme
+import org.codeberg.aimapp.ui.BindDirDialog
+import org.codeberg.aimapp.ui.ImageOptionsDialog
+import org.codeberg.aimapp.ui.PartitionPickerDialog
+import org.codeberg.aimapp.ui.PreferenceCategory
+import org.codeberg.aimapp.ui.PreferenceItem
+import org.codeberg.aimapp.ui.SwitchPreferenceItem
+import org.codeberg.aimapp.ui.theme.AimTheme
 import kotlin.coroutines.resume
 
 // here we kinda copy the UI of MSD (https://github.com/chenxiaolong/MSD)

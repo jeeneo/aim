@@ -15,9 +15,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim
+package org.codeberg.aimapp
 
-import org.codeberg.dryerlint.aim.utils.labelToMountStem
+import org.codeberg.aimapp.utils.labelToMountStem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

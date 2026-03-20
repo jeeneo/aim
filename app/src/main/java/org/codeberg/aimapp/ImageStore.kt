@@ -15,7 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim
+package org.codeberg.aimapp
 
 import android.content.Context
 import androidx.core.util.AtomicFile

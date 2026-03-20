@@ -1,4 +1,4 @@
-package org.codeberg.dryerlint.aim
+package org.codeberg.aimapp
 
 sealed class OpResult {
     data class Success(val output: String) : OpResult()

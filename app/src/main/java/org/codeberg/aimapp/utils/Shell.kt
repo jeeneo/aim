@@ -15,9 +15,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim.utils
+package org.codeberg.aimapp.utils
 
-import org.codeberg.dryerlint.aim.L
+import org.codeberg.aimapp.L
 
 data class ShellResult(val exitCode: Int, val output: String) {
     val isSuccess get() = exitCode == 0

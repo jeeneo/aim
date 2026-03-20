@@ -1,34 +1,34 @@
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
--keep class org.codeberg.dryerlint.aim.ImageProvider {
+-keep class org.codeberg.aimapp.ImageProvider {
     public protected *;
 }
 
--keep class org.codeberg.dryerlint.aim.ImageStore {
+-keep class org.codeberg.aimapp.ImageStore {
     public *;
 }
 
--keepclassmembers enum org.codeberg.dryerlint.aim.** {
+-keepclassmembers enum org.codeberg.aimapp.** {
     public static **[] values();
     public static ** valueOf(java.lang.String);
 }
 
--keepclassmembers class org.codeberg.dryerlint.aim.MountedImage { *; }
--keepclassmembers class org.codeberg.dryerlint.aim.PartitionedImageResult { *; }
--keepclassmembers class org.codeberg.dryerlint.aim.EnvironmentStatus { *; }
--keepclassmembers class org.codeberg.dryerlint.aim.ImportedImage { *; }
--keepclassmembers class org.codeberg.dryerlint.aim.ImageInfo { *; }
--keepclassmembers class org.codeberg.dryerlint.aim.PartitionState { *; }
--keepclassmembers class org.codeberg.dryerlint.aim.utils.ShellResult { *; }
--keepclassmembers class org.codeberg.dryerlint.aim.utils.PartitionEntry { *; }
--keepclassmembers class org.codeberg.dryerlint.aim.utils.PartitionTableInfo { *; }
--keepclassmembers class org.codeberg.dryerlint.aim.utils.ResolvedImage { *; }
--keepclassmembers class org.codeberg.dryerlint.aim.utils.PartitionedImageException { *; }
+-keepclassmembers class org.codeberg.aimapp.MountedImage { *; }
+-keepclassmembers class org.codeberg.aimapp.PartitionedImageResult { *; }
+-keepclassmembers class org.codeberg.aimapp.EnvironmentStatus { *; }
+-keepclassmembers class org.codeberg.aimapp.ImportedImage { *; }
+-keepclassmembers class org.codeberg.aimapp.ImageInfo { *; }
+-keepclassmembers class org.codeberg.aimapp.PartitionState { *; }
+-keepclassmembers class org.codeberg.aimapp.utils.ShellResult { *; }
+-keepclassmembers class org.codeberg.aimapp.utils.PartitionEntry { *; }
+-keepclassmembers class org.codeberg.aimapp.utils.PartitionTableInfo { *; }
+-keepclassmembers class org.codeberg.aimapp.utils.ResolvedImage { *; }
+-keepclassmembers class org.codeberg.aimapp.utils.PartitionedImageException { *; }
 
--keep class org.codeberg.dryerlint.aim.utils.ShellCmd { *; }
--keep class org.codeberg.dryerlint.aim.utils.ShellArg { *; }
--keep class org.codeberg.dryerlint.aim.utils.RootShell { *; }
+-keep class org.codeberg.aimapp.utils.ShellCmd { *; }
+-keep class org.codeberg.aimapp.utils.ShellArg { *; }
+-keep class org.codeberg.aimapp.utils.RootShell { *; }
 
 -keep class android.util.Log { *; }
 -keep class java.util.logging.** { *; }

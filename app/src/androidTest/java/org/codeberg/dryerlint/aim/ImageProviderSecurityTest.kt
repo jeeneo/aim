@@ -15,7 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim
+package org.codeberg.aimapp
 
 import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -306,7 +306,7 @@ class ImageProviderSecurityTest {
             ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
         method.isAccessible = true
         method.invoke(
-            provider, "/data/user/0/org.codeberg.dryerlint.aim/files/mounts/test/file.txt"
+            provider, "/data/user/0/org.codeberg.aimapp/files/mounts/test/file.txt"
         )
     }
 }

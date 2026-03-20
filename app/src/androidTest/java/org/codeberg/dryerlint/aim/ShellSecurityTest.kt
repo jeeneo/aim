@@ -15,18 +15,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim
+package org.codeberg.aimapp
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import org.codeberg.dryerlint.aim.utils.RootShell
-import org.codeberg.dryerlint.aim.utils.ShellArg
-import org.codeberg.dryerlint.aim.utils.ShellCmd
-import org.codeberg.dryerlint.aim.utils.enumArg
-import org.codeberg.dryerlint.aim.utils.loopDevArg
-import org.codeberg.dryerlint.aim.utils.mountOptsArg
-import org.codeberg.dryerlint.aim.utils.numArg
-import org.codeberg.dryerlint.aim.utils.pathArg
-import org.codeberg.dryerlint.aim.utils.secontextArg
+import org.codeberg.aimapp.utils.RootShell
+import org.codeberg.aimapp.utils.ShellArg
+import org.codeberg.aimapp.utils.ShellCmd
+import org.codeberg.aimapp.utils.enumArg
+import org.codeberg.aimapp.utils.loopDevArg
+import org.codeberg.aimapp.utils.mountOptsArg
+import org.codeberg.aimapp.utils.numArg
+import org.codeberg.aimapp.utils.pathArg
+import org.codeberg.aimapp.utils.secontextArg
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows

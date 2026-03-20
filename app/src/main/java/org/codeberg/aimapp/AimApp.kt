@@ -1,4 +1,4 @@
-package org.codeberg.dryerlint.aim
+package org.codeberg.aimapp
 
 import android.app.Application
 

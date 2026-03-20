@@ -15,15 +15,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim
+package org.codeberg.aimapp
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import org.codeberg.dryerlint.aim.utils.isValidPath
-import org.codeberg.dryerlint.aim.utils.sanitizeStem
-import org.codeberg.dryerlint.aim.utils.validateBindDir
-import org.codeberg.dryerlint.aim.utils.validatePath
+import org.codeberg.aimapp.utils.isValidPath
+import org.codeberg.aimapp.utils.sanitizeStem
+import org.codeberg.aimapp.utils.validateBindDir
+import org.codeberg.aimapp.utils.validatePath
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull

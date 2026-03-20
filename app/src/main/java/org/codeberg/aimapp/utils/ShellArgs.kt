@@ -15,7 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim.utils
+package org.codeberg.aimapp.utils
 
 fun pathArg(path: String): ShellArg {
     require(isValidPath(path)) { "Invalid path: $path" }

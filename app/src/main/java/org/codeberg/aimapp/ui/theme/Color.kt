@@ -1,4 +1,4 @@
-package org.codeberg.dryerlint.aim.ui.theme
+package org.codeberg.aimapp.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

@@ -15,7 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim
+package org.codeberg.aimapp
 
 import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,32 +23,32 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.codeberg.dryerlint.aim.utils.ALLOWED_CHMOD_MODES
-import org.codeberg.dryerlint.aim.utils.FS_LIST
-import org.codeberg.dryerlint.aim.utils.PartitionEntry
-import org.codeberg.dryerlint.aim.utils.PartitionTableInfo
-import org.codeberg.dryerlint.aim.utils.PartitionedImageException
-import org.codeberg.dryerlint.aim.utils.RootShell
-import org.codeberg.dryerlint.aim.utils.ShellArg
-import org.codeberg.dryerlint.aim.utils.ShellCmd
-import org.codeberg.dryerlint.aim.utils.buildMountOpts
-import org.codeberg.dryerlint.aim.utils.checkEnv
-import org.codeberg.dryerlint.aim.utils.detectFilesystem
-import org.codeberg.dryerlint.aim.utils.doMount
-import org.codeberg.dryerlint.aim.utils.enumArg
-import org.codeberg.dryerlint.aim.utils.filenameToMountStem
-import org.codeberg.dryerlint.aim.utils.formatImage
-import org.codeberg.dryerlint.aim.utils.isValidLabelStem
-import org.codeberg.dryerlint.aim.utils.loopDevArg
-import org.codeberg.dryerlint.aim.utils.makeAccessible
-import org.codeberg.dryerlint.aim.utils.pathArg
-import org.codeberg.dryerlint.aim.utils.probePartitionFilesystems
-import org.codeberg.dryerlint.aim.utils.probePartitionTable
-import org.codeberg.dryerlint.aim.utils.restorePermissions
-import org.codeberg.dryerlint.aim.utils.sanitizeStem
-import org.codeberg.dryerlint.aim.utils.secontextArg
-import org.codeberg.dryerlint.aim.utils.validateBindDir
-import org.codeberg.dryerlint.aim.utils.validatePath
+import org.codeberg.aimapp.utils.ALLOWED_CHMOD_MODES
+import org.codeberg.aimapp.utils.FS_LIST
+import org.codeberg.aimapp.utils.PartitionEntry
+import org.codeberg.aimapp.utils.PartitionTableInfo
+import org.codeberg.aimapp.utils.PartitionedImageException
+import org.codeberg.aimapp.utils.RootShell
+import org.codeberg.aimapp.utils.ShellArg
+import org.codeberg.aimapp.utils.ShellCmd
+import org.codeberg.aimapp.utils.buildMountOpts
+import org.codeberg.aimapp.utils.checkEnv
+import org.codeberg.aimapp.utils.detectFilesystem
+import org.codeberg.aimapp.utils.doMount
+import org.codeberg.aimapp.utils.enumArg
+import org.codeberg.aimapp.utils.filenameToMountStem
+import org.codeberg.aimapp.utils.formatImage
+import org.codeberg.aimapp.utils.isValidLabelStem
+import org.codeberg.aimapp.utils.loopDevArg
+import org.codeberg.aimapp.utils.makeAccessible
+import org.codeberg.aimapp.utils.pathArg
+import org.codeberg.aimapp.utils.probePartitionFilesystems
+import org.codeberg.aimapp.utils.probePartitionTable
+import org.codeberg.aimapp.utils.restorePermissions
+import org.codeberg.aimapp.utils.sanitizeStem
+import org.codeberg.aimapp.utils.secontextArg
+import org.codeberg.aimapp.utils.validateBindDir
+import org.codeberg.aimapp.utils.validatePath
 import java.io.File
 
 enum class MountMode { LOCAL, PUBLIC }
@@ -292,13 +292,13 @@ class MountManager(
 
         val fsType = try {
             when (val detect = detectFilesystem(ctx, imagePath, busyboxBin)) {
-                is org.codeberg.dryerlint.aim.utils.DetectFsResult.Found -> detect.fs
-                is org.codeberg.dryerlint.aim.utils.DetectFsResult.Unknown -> {
+                is org.codeberg.aimapp.utils.DetectFsResult.Found -> detect.fs
+                is org.codeberg.aimapp.utils.DetectFsResult.Unknown -> {
                     L.w(TAG, "fs detection failed for $imagePath (${imageFile.length()} bytes)")
                     return fail(R.string.error_unsupported_filesystem)
                 }
 
-                is org.codeberg.dryerlint.aim.utils.DetectFsResult.AccessError -> {
+                is org.codeberg.aimapp.utils.DetectFsResult.AccessError -> {
                     L.w(TAG, "fs access error for $imagePath: ${detect.reason}")
                     return fail(R.string.error_ksu_or_alike_permission)
                 }

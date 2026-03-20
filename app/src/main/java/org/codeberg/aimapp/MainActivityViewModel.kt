@@ -15,7 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim
+package org.codeberg.aimapp
 
 import android.app.Application
 import android.content.Context
@@ -29,11 +29,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.codeberg.dryerlint.aim.utils.ImagePathResolver
-import org.codeberg.dryerlint.aim.utils.PartitionEntry
-import org.codeberg.dryerlint.aim.utils.PartitionScheme
-import org.codeberg.dryerlint.aim.utils.validateBindDir
-import org.codeberg.dryerlint.aim.utils.validatePath
+import org.codeberg.aimapp.utils.ImagePathResolver
+import org.codeberg.aimapp.utils.PartitionEntry
+import org.codeberg.aimapp.utils.PartitionScheme
+import org.codeberg.aimapp.utils.validateBindDir
+import org.codeberg.aimapp.utils.validatePath
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -793,10 +793,10 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     val detectedFs = try {
                         withContext(Dispatchers.IO) {
                             when (val d =
-                                org.codeberg.dryerlint.aim.utils.detectFilesystem(app, path, "")) {
-                                is org.codeberg.dryerlint.aim.utils.DetectFsResult.Found -> d.fs
-                                is org.codeberg.dryerlint.aim.utils.DetectFsResult.Unknown -> null
-                                is org.codeberg.dryerlint.aim.utils.DetectFsResult.AccessError -> {
+                                org.codeberg.aimapp.utils.detectFilesystem(app, path, "")) {
+                                is org.codeberg.aimapp.utils.DetectFsResult.Found -> d.fs
+                                is org.codeberg.aimapp.utils.DetectFsResult.Unknown -> null
+                                is org.codeberg.aimapp.utils.DetectFsResult.AccessError -> {
                                     L.w(TAG, "fs access error probing $path: ${d.reason}")
                                     null
                                 }

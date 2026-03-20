@@ -15,10 +15,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim.utils
+package org.codeberg.aimapp.utils
 
-import org.codeberg.dryerlint.aim.FsType
-import org.codeberg.dryerlint.aim.L
+import org.codeberg.aimapp.FsType
+import org.codeberg.aimapp.L
 
 private const val TAG = "LabelParser"
 private const val MAX_LABEL_LENGTH = 64

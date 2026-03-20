@@ -15,13 +15,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim.utils
+package org.codeberg.aimapp.utils
 
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
-import org.codeberg.dryerlint.aim.R
+import org.codeberg.aimapp.R
 import java.io.File
 
 data class ResolvedImage(

@@ -23,7 +23,7 @@
         </activity>
         <provider
             android:name=".ImageProvider"
-            android:authorities="org.codeberg.dryerlint.aim.documents"
+            android:authorities="org.codeberg.aimapp.documents"
             android:exported="true"
             android:grantUriPermissions="true"
             android:permission="android.permission.MANAGE_DOCUMENTS">

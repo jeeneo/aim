@@ -15,7 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim
+package org.codeberg.aimapp
 
 import android.content.Context
 import android.database.Cursor
@@ -40,7 +40,7 @@ class ImageProvider : DocumentsProvider() {
 
     companion object {
         private const val TAG = "ImageProvider"
-        const val AUTHORITY = "org.codeberg.dryerlint.aim.documents"
+        const val AUTHORITY = "org.codeberg.aimapp.documents"
         private const val ROOT_ID = "mounted_images"
         private const val ROOT_DOC_ID = "mounts"
         private const val MAX_DOC_ID_LENGTH = 4096

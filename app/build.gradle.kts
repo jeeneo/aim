@@ -18,16 +18,16 @@ val hasReleaseSigning = listOf(
 ).all { !it.isNullOrBlank() }
 
 android {
-    namespace = "org.codeberg.dryerlint.aim"
+    namespace = "org.codeberg.aimapp"
     compileSdk {
         version = release(36)
     }
     defaultConfig {
-        applicationId = "org.codeberg.dryerlint.aim"
+        applicationId = "org.codeberg.aimapp"
         minSdk = 30
         targetSdk = 36
-        versionCode = 107
-        versionName = "1.07"
+        versionCode = 108
+        versionName = "1.08"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {

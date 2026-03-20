@@ -15,11 +15,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim.utils
+package org.codeberg.aimapp.utils
 
 import android.annotation.SuppressLint
 import android.content.Context
-import org.codeberg.dryerlint.aim.R
+import org.codeberg.aimapp.R
 
 private val PATH_FORBIDDEN = charArrayOf(
     '\u0000', '\n', '\r',

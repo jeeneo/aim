@@ -15,12 +15,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.codeberg.dryerlint.aim.utils
+package org.codeberg.aimapp.utils
 
 import android.content.Context
-import org.codeberg.dryerlint.aim.EnvironmentStatus
-import org.codeberg.dryerlint.aim.L
-import org.codeberg.dryerlint.aim.R
+import org.codeberg.aimapp.EnvironmentStatus
+import org.codeberg.aimapp.L
+import org.codeberg.aimapp.R
 
 private val BUSYBOX_CANDIDATES = listOf(
     "busybox", "/system/bin/busybox", "/system/xbin/busybox",
