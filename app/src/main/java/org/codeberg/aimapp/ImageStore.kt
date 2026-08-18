@@ -18,6 +18,7 @@
 package org.codeberg.aimapp
 
 import android.content.Context
+import android.util.Log
 import androidx.core.util.AtomicFile
 import org.json.JSONArray
 import org.json.JSONObject
@@ -64,7 +65,7 @@ class ImageStore(context: Context) {
                 )
             }
         } catch (e: Exception) {
-            L.e(TAG, "Failed to parse image store", e)
+            Log.e(TAG, "Failed to parse image store", e)
             emptyList()
         }
     }
@@ -89,7 +90,7 @@ class ImageStore(context: Context) {
             atomicFile.finishWrite(stream)
         } catch (e: Exception) {
             atomicFile.failWrite(stream)
-            L.e(TAG, "Failed to save image store", e)
+            Log.e(TAG, "Failed to save image store", e)
         }
     }
 }

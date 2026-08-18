@@ -55,9 +55,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.coordinatorlayout.widget.CoordinatorLayout
@@ -390,23 +390,12 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                     }
                 }
                 item(key = "cat_about") {
-                    val debugMode by viewModel.debugMode.collectAsState()
                     PreferenceCategory(title = stringResource(R.string.pref_header_about)) {
                         val uriHandler = LocalUriHandler.current
                         PreferenceItem(
                             title = stringResource(R.string.pref_version_name),
                             summary = versionName,
-                            onClick = { uriHandler.openUri("https://codeberg.org/dryerlint/AIM") },
-                            onLongClick = { viewModel.toggleDebugMode() })
-                        if (debugMode) {
-                            SwitchPreferenceItem(
-                                title = stringResource(R.string.pref_debug_mode_name),
-                                summary = stringResource(R.string.pref_debug_mode_desc_on),
-                                checked = true,
-                                enabled = canAct,
-                                onCheckedChange = { viewModel.toggleDebugMode() },
-                            )
-                        }
+                            onClick = { uriHandler.openUri("https://github.com/jeeneo/aim") })
                     }
                 }
             }

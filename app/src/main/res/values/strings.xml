@@ -71,8 +71,6 @@
     <string name="alert_format_failed">Format failed</string>
     <string name="alert_partition_selected">Partition %d selected.</string>
 
-    <string name="alert_debug_mode_enabled">Debug logging enabled</string>
-    <string name="alert_debug_mode_disabled">Debug logging disabled</string>
     <string name="pref_debug_mode_name">Debug mode</string>
     <string name="pref_debug_mode_desc_on">Logs saved to Android/data</string>
 

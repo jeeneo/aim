@@ -17,8 +17,8 @@
 
 package org.codeberg.aimapp.utils
 
+import android.util.Log
 import org.codeberg.aimapp.FsType
-import org.codeberg.aimapp.L
 
 private const val TAG = "LabelParser"
 private const val MAX_LABEL_LENGTH = 64
@@ -58,7 +58,7 @@ fun probeLabel(
         }
         labelToMountStem(raw)
     } catch (e: Exception) {
-        L.w(TAG, "Label probe failed for ${fsType.mountType}: ${e.message}")
+        Log.w(TAG, "Label probe failed for ${fsType.mountType}: ${e.message}")
         null
     }
 }
@@ -83,7 +83,7 @@ private fun probeExfatLabel(probe: (Int, Int) -> String, sizeBytes: Long): Strin
     val bpsShift = probe(108, 1).toIntOrNull(16) ?: return null
     val spcShift = probe(109, 1).toIntOrNull(16) ?: return null
     if (bpsShift !in 9..12 || spcShift !in 0..25) {
-        L.w(TAG, "exFAT: bad shift values bps=$bpsShift spc=$spcShift")
+        Log.w(TAG, "exFAT: bad shift values bps=$bpsShift spc=$spcShift")
         return null
     }
     val bytesPerSector = 1L shl bpsShift
@@ -94,19 +94,19 @@ private fun probeExfatLabel(probe: (Int, Int) -> String, sizeBytes: Long): Strin
     val clusterHeapOffset = parseL3U32Hex(clusterHeapOffsetHex)
     val rootDirCluster = parseL3U32Hex(rootDirClusterHex)
     if (rootDirCluster < 2) {
-        L.w(TAG, "exFAT: invalid root dir cluster $rootDirCluster")
+        Log.w(TAG, "exFAT: invalid root dir cluster $rootDirCluster")
         return null
     }
     val rootDirByteOffset =
         (clusterHeapOffset + (rootDirCluster - 2) * sectorsPerCluster) * bytesPerSector
     if (rootDirByteOffset !in 0..<sizeBytes) {
-        L.w(TAG, "exFAT: root dir offset $rootDirByteOffset out of bounds (size=$sizeBytes)")
+        Log.w(TAG, "exFAT: root dir offset $rootDirByteOffset out of bounds (size=$sizeBytes)")
         return null
     }
     val scanBytes = (sizeBytes - rootDirByteOffset).coerceIn(0L, 4096L).toInt()
     if (scanBytes < 32) return null
     if (rootDirByteOffset > Int.MAX_VALUE) {
-        L.w(TAG, "exFAT: root dir offset too large for probe: $rootDirByteOffset")
+        Log.w(TAG, "exFAT: root dir offset too large for probe: $rootDirByteOffset")
         return null
     }
     val rootDirHex = probe(rootDirByteOffset.toInt(), scanBytes)

@@ -19,7 +19,7 @@ package org.codeberg.aimapp.utils
 
 import android.annotation.SuppressLint
 import android.content.Context
-import org.codeberg.aimapp.L
+import android.util.Log
 import org.codeberg.aimapp.OpResult
 import org.codeberg.aimapp.R
 import java.io.File
@@ -117,7 +117,7 @@ private fun formatExt4(
     val mkfs = findBinary(busyboxBin, "mke2fs", "mkfs.ext4") ?: return ShellResult(
         -1, ctx.getString(R.string.error_no_mke2fs)
     )
-    L.d(TAG, "Formatting $canonical as ext4 with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})")
+    Log.d(TAG, "Formatting $canonical as ext4 with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})")
     return if (mkfs.isBusyboxApplet) {
         RootShell.cmd(
             "mkfs.ext4",
@@ -146,7 +146,7 @@ private fun formatExfat(
     val mkfs = findBinary(busyboxBin, "mkfs.exfat", "mkexfatfs") ?: return ShellResult(
         -1, ctx.getString(R.string.error_no_mkexfat)
     )
-    L.d(TAG, "Formatting $canonical as exfat with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})")
+    Log.d(TAG, "Formatting $canonical as exfat with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})")
     return if (mkfs.isBusyboxApplet) {
         RootShell.cmd("mkfs.exfat", imgArg, busyboxBin = busyboxBin, redirectErr = true)
     } else {

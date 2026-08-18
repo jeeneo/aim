@@ -20,6 +20,7 @@ package org.codeberg.aimapp
 import android.app.Application
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -86,7 +87,6 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         private val TAG = MainActivityViewModel::class.java.simpleName
         private const val PREFS_SETTINGS = "app_settings"
         private const val KEY_BIND_DIR = "bindmount_dir"
-        private const val KEY_DEBUG_MODE = "debug_mode"
         private const val DEFAULT_BIND_DIR = "/storage/emulated/0/mounts"
     }
 
@@ -123,13 +123,8 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     private val _bindDir = MutableStateFlow(
         settingsPrefs.getString(KEY_BIND_DIR, DEFAULT_BIND_DIR) ?: DEFAULT_BIND_DIR
     )
-
     val bindDir: StateFlow<String> = _bindDir
 
-    private val _debugMode = MutableStateFlow(
-        settingsPrefs.getBoolean(KEY_DEBUG_MODE, false)
-    )
-    val debugMode: StateFlow<Boolean> = _debugMode
 
     private fun errorText(
         throwable: Throwable,
@@ -137,18 +132,6 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     ): String {
         return throwable.message?.takeIf { it.isNotBlank() }
             ?: throwable.javaClass.simpleName.takeIf { it.isNotBlank() } ?: fallback
-    }
-
-    fun toggleDebugMode() {
-        val newValue = !_debugMode.value
-        _debugMode.value = newValue
-        settingsPrefs.edit { putBoolean(KEY_DEBUG_MODE, newValue) }
-        DebugLog.setEnabled(app, newValue)
-        if (newValue) {
-            alert(Alert.Info(app.getString(R.string.alert_debug_mode_enabled)))
-        } else {
-            alert(Alert.Info(app.getString(R.string.alert_debug_mode_disabled)))
-        }
     }
 
     fun setBindDir(dir: String) {
@@ -162,13 +145,6 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         _bindDir.value = trimmed
         settingsPrefs.edit { putString(KEY_BIND_DIR, trimmed) }
         alert(Alert.Info(app.getString(R.string.alert_bind_dir_set, trimmed)))
-    }
-
-    init {
-        if (_debugMode.value) {
-            DebugLog.setEnabled(app, true)
-        }
-        checkEnvironment()
     }
 
     private fun refreshUiLock() {
@@ -302,9 +278,9 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
 
     fun alert(alert: Alert) {
         when (alert) {
-            is Alert.Failure -> L.e(TAG, "Alert: ${alert.message}")
-            is Alert.Success -> L.i(TAG, "Alert: ${alert.message}")
-            is Alert.Info -> L.i(TAG, "Alert: ${alert.message}")
+            is Alert.Failure -> Log.e(TAG, "Alert: ${alert.message}")
+            is Alert.Success -> Log.i(TAG, "Alert: ${alert.message}")
+            is Alert.Info -> Log.i(TAG, "Alert: ${alert.message}")
         }
         _alerts.value = listOf(alert)
     }
@@ -343,7 +319,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     withContext(Dispatchers.IO) { mountManager.checkEnvironment() }
                     _envChecked.value = true
                 } catch (e: Exception) {
-                    L.e(TAG, "Environment check failed", e)
+                    Log.e(TAG, "Environment check failed", e)
                     alert(
                         Alert.Failure(
                             e.message ?: app.getString(R.string.alert_environment_check_failed)
@@ -513,7 +489,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     imagePath = img.path
                 )
                 if (err != null) {
-                    L.e(TAG, "Unmount failed: ${img.path}")
+                    Log.e(TAG, "Unmount failed: ${img.path}")
                     errors += app.getString(R.string.error_op_unmount, img.displayName, err)
                 } else {
                     mountedPartitionIndex.remove(img.path)
@@ -549,7 +525,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 }
 
                 is MountResult.Failure -> {
-                    L.e(TAG, "Mount failed: ${img.path}")
+                    Log.e(TAG, "Mount failed: ${img.path}")
                     errors += app.getString(
                         R.string.error_op_mount,
                         img.displayName,
@@ -584,7 +560,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 imagePath = img.path
             )
             if (err != null) {
-                L.e(TAG, "Remount unmount failed: ${img.path}")
+                Log.e(TAG, "Remount unmount failed: ${img.path}")
                 errors += app.getString(R.string.error_op_remount, img.displayName, err)
                 continue
             }
@@ -608,7 +584,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 }
 
                 is MountResult.Failure -> {
-                    L.e(TAG, "Remount failed: ${img.path}")
+                    Log.e(TAG, "Remount failed: ${img.path}")
                     errors += app.getString(
                         R.string.error_op_remount,
                         img.displayName,
@@ -656,7 +632,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     }
 
                     is BindResult.Failure -> {
-                        L.e(TAG, "Bind create failed: ${img.path}")
+                        Log.e(TAG, "Bind create failed: ${img.path}")
                         errors += app.getString(
                             R.string.error_op_bind,
                             img.displayName,
@@ -797,7 +773,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                                 is org.codeberg.aimapp.utils.DetectFsResult.Found -> d.fs
                                 is org.codeberg.aimapp.utils.DetectFsResult.Unknown -> null
                                 is org.codeberg.aimapp.utils.DetectFsResult.AccessError -> {
-                                    L.w(TAG, "fs access error probing $path: ${d.reason}")
+                                    Log.w(TAG, "fs access error probing $path: ${d.reason}")
                                     null
                                 }
                             }

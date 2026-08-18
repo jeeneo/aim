@@ -17,7 +17,7 @@
 
 package org.codeberg.aimapp.utils
 
-import org.codeberg.aimapp.L
+import android.util.Log
 
 data class ShellResult(val exitCode: Int, val output: String) {
     val isSuccess get() = exitCode == 0
@@ -172,7 +172,7 @@ object RootShell {
         val command = try {
             ShellCmd.of(binary, *args, busyboxBin = busyboxBin)
         } catch (_: IllegalArgumentException) {
-            L.e(TAG, "Blocked execution of non-whitelisted binary: $binary")
+            Log.e(TAG, "Blocked execution of non-whitelisted binary: $binary")
             return ShellResult(-1, "Binary not allowed: $binary")
         }
         return cmd(command, pipeInto, chain, orChain, redirectErr, ignoreError, suppressErr)
@@ -192,7 +192,7 @@ object RootShell {
             val probeCode = probe.waitFor()
             if (probeCode == 0 && probeOut.contains("uid=0")) {
                 resolvedSuPrefix = prefix
-                L.i(TAG, "Resolved su prefix: ${prefix.joinToString(" ")}")
+                Log.i(TAG, "Resolved su prefix: ${prefix.joinToString(" ")}")
                 return ProcessBuilder(*(prefix + cmdLine).toTypedArray()).redirectErrorStream(true)
                     .start()
             }
@@ -235,7 +235,7 @@ object RootShell {
         }
         first
     } catch (e: Exception) {
-        L.e(TAG, "exec failed", e)
+        Log.e(TAG, "exec failed", e)
         ShellResult(-1, e.message ?: "Process failed")
     }
 }

@@ -18,6 +18,7 @@
 package org.codeberg.aimapp
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -206,7 +207,7 @@ class MountManager(
                 busyboxBin = busyboxBin
             ).exitCode == 0
             if (!mounted) {
-                L.w(TAG, "Detaching stale loop $loop for $imagePath")
+                Log.w(TAG, "Detaching stale loop $loop for $imagePath")
                 detachLoop(loop)
             }
         }
@@ -227,10 +228,10 @@ class MountManager(
             pathArg("/proc/mounts"),
             ignoreError = true
         )
-        L.d(TAG, "readMountedImages: exit=${r.exitCode}, blank=${r.output.isBlank()}")
+        Log.d(TAG, "readMountedImages: exit=${r.exitCode}, blank=${r.output.isBlank()}")
 
         if (r.exitCode != 0 || r.output.isBlank()) {
-            L.d(TAG, "No mounts found under $mountsDir/")
+            Log.d(TAG, "No mounts found under $mountsDir/")
             return emptyList()
         }
 
@@ -241,22 +242,22 @@ class MountManager(
             val fsTypeStr = p.getOrNull(2)
             val fs = fsTypeStr?.let { FS_LIST[it] }
             when {
-                p.size < 3 -> L.d(TAG, "SKIP (fields=${p.size}): $line").let { null }
+                p.size < 3 -> Log.d(TAG, "SKIP (fields=${p.size}): $line").let { null }
 
-                fs == null -> L.d(TAG, "SKIP (unknown fs '$fsTypeStr'): $line").let { null }
+                fs == null -> Log.d(TAG, "SKIP (unknown fs '$fsTypeStr'): $line").let { null }
 
-                device == null || "loop" !in device -> L.d(
+                device == null || "loop" !in device -> Log.d(
                     TAG, "SKIP (not loop, device=$device): $line"
                 ).let { null }
 
                 else -> MountedImage(device, mountPoint!!, fs).also {
-                    L.d(
+                    Log.d(
                         TAG, "MOUNT: $mountPoint ($fsTypeStr)"
                     )
                 }
             }
         }.distinctBy { "${it.mountPoint}|${it.loopDevice}" }.sortedBy { it.mountPoint }.toList()
-            .also { L.d(TAG, "Total mounted: ${it.size}") }
+            .also { Log.d(TAG, "Total mounted: ${it.size}") }
     }
 
     fun refreshMountedImages() {
@@ -294,17 +295,17 @@ class MountManager(
             when (val detect = detectFilesystem(ctx, imagePath, busyboxBin)) {
                 is org.codeberg.aimapp.utils.DetectFsResult.Found -> detect.fs
                 is org.codeberg.aimapp.utils.DetectFsResult.Unknown -> {
-                    L.w(TAG, "fs detection failed for $imagePath (${imageFile.length()} bytes)")
+                    Log.w(TAG, "fs detection failed for $imagePath (${imageFile.length()} bytes)")
                     return fail(R.string.error_unsupported_filesystem)
                 }
 
                 is org.codeberg.aimapp.utils.DetectFsResult.AccessError -> {
-                    L.w(TAG, "fs access error for $imagePath: ${detect.reason}")
+                    Log.w(TAG, "fs access error for $imagePath: ${detect.reason}")
                     return fail(R.string.error_ksu_or_alike_permission)
                 }
             }
         } catch (e: PartitionedImageException) {
-            L.d(TAG, "Partitioned image detected: $imagePath")
+            Log.d(TAG, "Partitioned image detected: $imagePath")
             val partResult = PartitionedImageResult(
                 e.tableInfo,
                 probePartitionFilesystems(ctx, imagePath, e.tableInfo.partitions, busyboxBin)
@@ -312,7 +313,7 @@ class MountManager(
             return MountResult.PartitionedImage(partResult)
         }
 
-        L.d(TAG, "Detected fs=${fsType.mountType} for $imagePath")
+        Log.d(TAG, "Detected fs=${fsType.mountType} for $imagePath")
 
         val loops = attachedLoops(imagePath)
         if (loops.isNotEmpty()) {
@@ -326,11 +327,11 @@ class MountManager(
                 ).exitCode == 0
             }
             if (mountedLoop != null) {
-                L.w(TAG, "Image already mounted via $mountedLoop")
+                Log.w(TAG, "Image already mounted via $mountedLoop")
                 refreshMountedImages()
                 return fail(R.string.error_image_already_mounted)
             }
-            loops.forEach { L.w(TAG, "Stale loop $it — detaching"); detachLoop(it) }
+            loops.forEach { Log.w(TAG, "Stale loop $it — detaching"); detachLoop(it) }
         }
 
         val stem = sanitizeStem(
@@ -377,7 +378,7 @@ class MountManager(
 
         if (item.fsType.posixPermissions) {
             restorePermissions(item.mountPoint, busyboxBin).onFailure {
-                L.w(TAG, "restorePermissions failed for ${item.mountPoint}: ${it.message}")
+                Log.w(TAG, "restorePermissions failed for ${item.mountPoint}: ${it.message}")
             }
         }
 
@@ -394,13 +395,13 @@ class MountManager(
             "umount", mpArg, busyboxBin = busyboxBin
         ).exitCode == 0 || RootShell.cmd("umount", mpArg).exitCode == 0
         if (!umountOk) {
-            L.e(TAG, "Failed to unmount ${item.mountPoint}")
+            Log.e(TAG, "Failed to unmount ${item.mountPoint}")
             return fail(R.string.error_unmount_failed)
         }
 
         val loopDetached = runCatching { detachLoop(item.loopDevice) }
         if (loopDetached.isFailure) {
-            L.w(
+            Log.w(
                 TAG,
                 "Loop detach failed for ${item.loopDevice}: ${loopDetached.exceptionOrNull()?.message}"
             )
@@ -442,7 +443,7 @@ class MountManager(
             )
         )
         if (mkdirDir.exitCode != 0) {
-            L.e(TAG, "Failed to create storage dir: $rbd")
+            Log.e(TAG, "Failed to create storage dir: $rbd")
             return bindFail(R.string.error_failed_create_storage_dir, rbd)
         }
         if (isMountedAt(target)) return BindResult.AlreadyExposed(target)
@@ -459,7 +460,7 @@ class MountManager(
             )
         )
         if (mkdirTgt.exitCode != 0) {
-            L.e(TAG, "Failed to create mount point dir: $target")
+            Log.e(TAG, "Failed to create mount point dir: $target")
             return bindFail(R.string.error_failed_create_mount_point_dir, target)
         }
 
@@ -467,7 +468,7 @@ class MountManager(
             "mount", ShellArg.literal("--bind"), pathArg(source), tgtArg, redirectErr = true
         )
         if (r.exitCode != 0) {
-            L.e(TAG, "Bind mount failed ($target): ${r.output}")
+            Log.e(TAG, "Bind mount failed ($target): ${r.output}")
             return bindFail(R.string.error_bind_mount_failed, r.output)
         }
 
@@ -529,27 +530,27 @@ class MountManager(
      */
     private fun resolveAndValidateBindDir(bindDir: String): String? {
         if (validateBindDir(ctx, bindDir) != null) {
-            L.w(TAG, "bindDir rejected before canonicalization: $bindDir")
+            Log.w(TAG, "bindDir rejected before canonicalization: $bindDir")
             return null
         }
         val resolved = try {
             File(bindDir).canonicalPath
         } catch (e: Exception) {
-            L.e(TAG, "canonicalPath failed for $bindDir: ${e.message}")
+            Log.e(TAG, "canonicalPath failed for $bindDir: ${e.message}")
             return null
         }
         if (validateBindDir(ctx, resolved) != null) {
-            L.w(TAG, "bindDir rejected after canonicalization: $resolved")
+            Log.w(TAG, "bindDir rejected after canonicalization: $resolved")
             return null
         }
         val verified = try {
             File(resolved).canonicalPath
         } catch (e: Exception) {
-            L.e(TAG, "re-resolve failed for $resolved: ${e.message}")
+            Log.e(TAG, "re-resolve failed for $resolved: ${e.message}")
             return null
         }
         if (verified != resolved) {
-            L.e(TAG, "bindDir changed between resolutions — possible symlink race: $bindDir")
+            Log.e(TAG, "bindDir changed between resolutions — possible symlink race: $bindDir")
             return null
         }
         return resolved
@@ -573,13 +574,13 @@ class MountManager(
 
         if (result.isSuccess) {
             if (!isMountedAt(mp)) {
-                L.e(TAG, "Mount reported success but $mp absent from /proc/mounts")
+                Log.e(TAG, "Mount reported success but $mp absent from /proc/mounts")
                 detachStaleLoops(imagePath)
                 return fail(R.string.error_mount_not_visible)
             }
             if (fsType.posixPermissions) {
                 makeAccessible(mp, mountsDir, busyboxBin).onFailure {
-                    L.w(TAG, "makeAccessible failed for $mp: ${it.message}")
+                    Log.w(TAG, "makeAccessible failed for $mp: ${it.message}")
                 }
             }
             refreshMountedImages()
@@ -587,7 +588,7 @@ class MountManager(
             return MountResult.Mounted(mp)
         }
 
-        L.e(TAG, "doMount failed for $imagePath -> $mp: ${result.exceptionOrNull()?.message}")
+        Log.e(TAG, "doMount failed for $imagePath -> $mp: ${result.exceptionOrNull()?.message}")
         val cause = result.exceptionOrNull()?.message ?: ""
         return MountResult.Failure(
             ctx.getString(

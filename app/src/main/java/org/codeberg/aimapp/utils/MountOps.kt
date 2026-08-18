@@ -18,8 +18,8 @@
 package org.codeberg.aimapp.utils
 
 import android.content.Context
+import android.util.Log
 import org.codeberg.aimapp.FsType
-import org.codeberg.aimapp.L
 import org.codeberg.aimapp.MountMode
 import org.codeberg.aimapp.OpResult
 import org.codeberg.aimapp.R
@@ -52,7 +52,7 @@ private fun checkKernelFs(fsType: String, busyboxBin: String): Boolean {
             busyboxBin = busyboxBin
         ).exitCode == 0
     ) return true
-    L.d(TAG, "$fsType not in /proc/filesystems")
+    Log.d(TAG, "$fsType not in /proc/filesystems")
     return false
 }
 
@@ -66,7 +66,7 @@ fun doMount(
     partOffset: Long = 0
 ): OpResult {
     val isPartition = partOffset > 0
-    L.d(
+    Log.d(
         TAG,
         "img=$imagePath, mp=$mountPoint, fs=${fsType.mountType}, opts=$mountOpts" + if (isPartition) ", offset=$partOffset" else ""
     )
@@ -76,7 +76,7 @@ fun doMount(
     val fsArg = enumArg(fsType.mountType, ALLOWED_FS_TYPES)
     val optsArg = mountOptsArg(mountOpts)
     if (!checkKernelFs(fsType.mountType, busyboxBin)) {
-        L.w(TAG, "kernel does not support ${fsType.mountType}")
+        Log.w(TAG, "kernel does not support ${fsType.mountType}")
         return OpResult.failure(
             Exception(
                 ctx.getString(
@@ -104,13 +104,13 @@ fun doMount(
             busyboxBin = busyboxBin,
             redirectErr = true
         )
-        L.d(TAG, "direct: exit=${direct.exitCode}, out=${direct.output}")
+        Log.d(TAG, "direct: exit=${direct.exitCode}, out=${direct.output}")
         if (direct.exitCode == 0) return OpResult.success("Mounted at $mountPoint")
         directMountError = detailOrUnknown(direct.output)
-        L.d(TAG, "direct mount failed: $directMountError")
+        Log.d(TAG, "direct mount failed: $directMountError")
     }
 
-    L.d(TAG, if (isPartition) "using losetup with offset" else "direct failed, falling to losetup")
+    Log.d(TAG, if (isPartition) "using losetup with offset" else "direct failed, falling to losetup")
     var attachedLoop: String? = null
     var mountSucceeded = false
     try {
@@ -119,16 +119,16 @@ fun doMount(
         ).output.lineSequence().firstOrNull()?.trim() ?: return failCleanup(
             mountPoint, null, ctx.getString(R.string.error_no_free_loop), busyboxBin
         )
-        L.d(TAG, "loop=$loopDev")
+        Log.d(TAG, "loop=$loopDev")
         attachedLoop = loopDev
         val loopArg = loopDevArg(loopDev)
 
         val loopIdx = loopDev.substringAfterLast("loop", "").toIntOrNull()
         if (loopIdx == null) {
-            L.w(TAG, "could not parse loop index from '$loopDev', skipping mknod")
+            Log.w(TAG, "could not parse loop index from '$loopDev', skipping mknod")
         } else {
             if (RootShell.cmd("test", ShellArg.literal("-b"), loopArg).exitCode != 0) {
-                L.d(TAG, "creating block device node for loop$loopIdx")
+                Log.d(TAG, "creating block device node for loop$loopIdx")
                 RootShell.cmd(
                     "mknod",
                     loopArg,
@@ -150,18 +150,18 @@ fun doMount(
             add(loopArg)
             add(imgPath)
         }
-        L.d(TAG, "losetup: dev=$loopDev" + if (isPartition) ", offset=$partOffset" else "")
+        Log.d(TAG, "losetup: dev=$loopDev" + if (isPartition) ", offset=$partOffset" else "")
         val attach = RootShell.cmd(
             "losetup", *losetupArgs.toTypedArray(), busyboxBin = busyboxBin, redirectErr = true
         )
-        L.d(TAG, "losetup: exit=${attach.exitCode}, out=${attach.output.trim().take(200)}")
+        Log.d(TAG, "losetup: exit=${attach.exitCode}, out=${attach.output.trim().take(200)}")
         if (attach.exitCode != 0) return failCleanup(
             mountPoint,
             null,
             ctx.getString(R.string.error_failed_attach_loop, detailOrUnknown(attach.output)),
             busyboxBin
         )
-        L.d(TAG, "mount: dev=$loopDev -> $mountPoint, fs=${fsType.mountType}")
+        Log.d(TAG, "mount: dev=$loopDev -> $mountPoint, fs=${fsType.mountType}")
         val mount = RootShell.cmd(
             "mount",
             ShellArg.literal("-t"),
@@ -173,7 +173,7 @@ fun doMount(
             busyboxBin = busyboxBin,
             redirectErr = true
         )
-        L.d(TAG, "mount: exit=${mount.exitCode}, out=${mount.output.trim().take(200)}")
+        Log.d(TAG, "mount: exit=${mount.exitCode}, out=${mount.output.trim().take(200)}")
         if (mount.exitCode != 0) {
             val fullDetail = listOfNotNull(
                 directMountError, detailOrUnknown(mount.output)
@@ -206,7 +206,7 @@ fun doMount(
 
 // chmod/chcon on POSIX mounts so the app process can access files
 fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): OpResult {
-    L.d(TAG, "makeAccessible: $mountPoint")
+    Log.d(TAG, "makeAccessible: $mountPoint")
     val mpArg = pathArg(mountPoint)
     val mountsDirArg = pathArg(mountsDir)
     val parentCtx = RootShell.cmd(
@@ -215,7 +215,7 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): O
         mountsDirArg,
         pipeInto = ShellCmd.of("awk", ShellArg.of("{print $1}"), busyboxBin = busyboxBin)
     ).output.trim().takeIf { it.matches(Regex("^[a-zA-Z0-9_:,.]+$")) && ':' in it } ?: run {
-        L.w(TAG, "makeAccessible: could not parse SELinux context, using fallback")
+        Log.w(TAG, "makeAccessible: could not parse SELinux context, using fallback")
         "u:object_r:app_data_file:s0"
     }
 
@@ -232,7 +232,7 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): O
         busyboxBin = busyboxBin
     )
     if (chmodDirs.exitCode != 0) {
-        L.w(TAG, "chmod (dirs) failed: ${chmodDirs.output}")
+        Log.w(TAG, "chmod (dirs) failed: ${chmodDirs.output}")
         return OpResult.failure(Exception("Failed to set directory permissions on $mountPoint"))
     }
 
@@ -249,7 +249,7 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): O
         busyboxBin = busyboxBin
     )
     if (chmodFiles.exitCode != 0) {
-        L.w(TAG, "chmod (files) failed: ${chmodFiles.output}")
+        Log.w(TAG, "chmod (files) failed: ${chmodFiles.output}")
         return OpResult.failure(Exception("Failed to set file permissions on $mountPoint"))
     }
 
@@ -262,13 +262,13 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): O
         suppressErr = true,
         ignoreError = true
     )
-    if (chcon.exitCode != 0) L.w(TAG, "chcon failed: ${chcon.output}")
+    if (chcon.exitCode != 0) Log.w(TAG, "chcon failed: ${chcon.output}")
     return OpResult.success("permissions set")
 }
 
 // restore ownership (1000:1000) and permissions before unmount
 fun restorePermissions(mountPoint: String, busyboxBin: String): OpResult {
-    L.d(TAG, "restorePerms: $mountPoint")
+    Log.d(TAG, "restorePerms: $mountPoint")
     val mpArg = pathArg(mountPoint)
     val chown = RootShell.cmd(
         "chown",
@@ -277,7 +277,7 @@ fun restorePermissions(mountPoint: String, busyboxBin: String): OpResult {
         mpArg,
         busyboxBin = busyboxBin
     )
-    if (chown.exitCode != 0) L.w(TAG, "chown failed: ${chown.output}")
+    if (chown.exitCode != 0) Log.w(TAG, "chown failed: ${chown.output}")
 
     var failed = false
     listOf(Pair("d", "775"), Pair("f", "664")).forEach { (type, mode) ->
@@ -294,7 +294,7 @@ fun restorePermissions(mountPoint: String, busyboxBin: String): OpResult {
             busyboxBin = busyboxBin
         )
         if (res.exitCode != 0) {
-            L.w(TAG, "chmod restore ($type) failed: ${res.output}")
+            Log.w(TAG, "chmod restore ($type) failed: ${res.output}")
             failed = true
         }
     }
@@ -304,7 +304,7 @@ fun restorePermissions(mountPoint: String, busyboxBin: String): OpResult {
 }
 
 fun failCleanup(mp: String, loop: String?, msg: String, busyboxBin: String): OpResult {
-    L.w(TAG, "failCleanup: $msg (loop=$loop, mp=$mp)")
+    Log.w(TAG, "failCleanup: $msg (loop=$loop, mp=$mp)")
     loop?.let { dev ->
         RootShell.cmd(
             "losetup",

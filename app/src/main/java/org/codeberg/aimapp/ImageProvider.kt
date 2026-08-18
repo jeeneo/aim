@@ -29,6 +29,7 @@ import android.provider.DocumentsProvider
 import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
+import android.util.Log
 import android.webkit.MimeTypeMap
 import java.io.File
 import java.io.FileNotFoundException
@@ -172,7 +173,7 @@ class ImageProvider : DocumentsProvider() {
     }
 
     private fun logSecurityEvent(event: String, vararg details: String) {
-        L.w(TAG, "SECURITY: $event | ${details.joinToString(" | ")}")
+        Log.w(TAG, "SECURITY: $event | ${details.joinToString(" | ")}")
     }
 
     override fun onCreate(): Boolean = true

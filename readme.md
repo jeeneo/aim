@@ -1,10 +1,7 @@
-<!-- sorry -->
-
 # AIM
 
 <img src="assets/aim_logo.svg" alt="get it? aim? it's a pun of a bullseye cause yk it looks like a target but also a disc image uhm heh sorry" width="72">
 
-<br>
 <br>
 
 AIM is an Android app for mounting `.img` files on your phone. Supports `ext4`, `exfat` and `fat32` filesystems.
@@ -74,4 +71,4 @@ ISO file types are supported, but the filesystem `ISO9660` is hardly supported o
 
 ## License
 
-AIM is licensed under GPLv3. Please see [`LICENSE`](./LICENSE) for the full license text.
+AIM is licensed under GPL-3.0-or-later. Please see [`LICENSE`](./LICENSE) for the full license text.

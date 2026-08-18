@@ -18,8 +18,8 @@
 package org.codeberg.aimapp.utils
 
 import android.content.Context
+import android.util.Log
 import org.codeberg.aimapp.EnvironmentStatus
-import org.codeberg.aimapp.L
 import org.codeberg.aimapp.R
 
 private val BUSYBOX_CANDIDATES = listOf(
@@ -54,9 +54,9 @@ fun checkEnv(ctx: Context): Pair<EnvironmentStatus, String> {
     val busyboxPath = resolveBusyboxPath()
     if (busyboxPath != null) {
         val bbVersion = RootShell.cmd(busyboxPath, ShellArg.literal("--version")).output.lineSequence().firstOrNull()?.trim()
-        L.d("EnvChecker", "BusyBox version: $bbVersion")
+        Log.d("EnvChecker", "BusyBox version: $bbVersion")
         val androidVersion = android.os.Build.VERSION.RELEASE
-        L.d("EnvChecker", "Android version: $androidVersion")
+        Log.d("EnvChecker", "Android version: $androidVersion")
         return EnvironmentStatus(
             rootAvailable = true,
             rootMessage = ctx.getString(R.string.env_root_granted),
