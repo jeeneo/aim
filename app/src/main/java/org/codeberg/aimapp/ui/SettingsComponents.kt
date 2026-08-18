@@ -19,20 +19,15 @@
 
 package org.codeberg.aimapp.ui
 
-import android.content.res.ColorStateList
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -40,7 +35,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,166 +42,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import com.google.android.material.materialswitch.MaterialSwitch
 import org.codeberg.aimapp.R
-
-@Composable
-fun PreferenceCategory(
-    title: String,
-    content: @Composable () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 8.dp),
-        )
-        content()
-    }
-}
-
-@Composable
-fun PreferenceItem(
-    title: String,
-    summary: String? = null,
-    enabled: Boolean = true,
-    onClick: (() -> Unit)? = null,
-    onLongClick: (() -> Unit)? = null,
-    summaryColor: androidx.compose.ui.graphics.Color? = null,
-    titleFontWeight: FontWeight? = null,
-) {
-    val modifier = Modifier
-        .fillMaxWidth()
-        .then(
-            if ((onClick != null || onLongClick != null) && enabled) Modifier.combinedClickable(
-                onClick = { onClick?.invoke() },
-                onLongClick = { onLongClick?.invoke() },
-            )
-            else Modifier
-        )
-        .alpha(if (enabled) 1f else 0.38f)
-        .padding(horizontal = 16.dp, vertical = 12.dp)
-
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge.copy(
-                fontWeight = titleFontWeight ?: FontWeight.SemiBold
-            ),
-        )
-        if (summary != null) {
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = summary,
-                style = MaterialTheme.typography.bodyMedium,
-                color = summaryColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-fun SwitchPreferenceItem(
-    title: String,
-    summary: String? = null,
-    checked: Boolean,
-    enabled: Boolean = true,
-    onCheckedChange: (Boolean) -> Unit,
-    onClick: (() -> Unit)? = null,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(IntrinsicSize.Min)
-            .alpha(if (enabled) 1f else 0.38f),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .then(
-                    if (onClick != null && enabled) Modifier.clickable(onClick = onClick)
-                    else Modifier
-                )
-                .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 8.dp),
-        ) {
-            Column(verticalArrangement = Arrangement.Center) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (summary != null) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = summary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-        VerticalDivider(
-            modifier = Modifier
-                .fillMaxHeight()
-                .padding(vertical = 8.dp)
-                .width(1.dp),
-            color = MaterialTheme.colorScheme.outlineVariant,
-        )
-        val primaryColor = MaterialTheme.colorScheme.primary.toArgb()
-        val onPrimaryColor = MaterialTheme.colorScheme.onPrimary.toArgb()
-        val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant.toArgb()
-        val outlineColor = MaterialTheme.colorScheme.outline.toArgb()
-        AndroidView(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            factory = { context ->
-                MaterialSwitch(context).apply {
-                    trackTintList = ColorStateList(
-                        arrayOf(
-                            intArrayOf(android.R.attr.state_checked),
-                            intArrayOf(-android.R.attr.state_checked)
-                        ), intArrayOf(primaryColor, surfaceVariantColor)
-                    )
-                    thumbTintList = ColorStateList(
-                        arrayOf(
-                            intArrayOf(android.R.attr.state_checked),
-                            intArrayOf(-android.R.attr.state_checked)
-                        ), intArrayOf(onPrimaryColor, outlineColor)
-                    )
-                    trackDecorationTintList = ColorStateList(
-                        arrayOf(
-                            intArrayOf(android.R.attr.state_checked),
-                            intArrayOf(-android.R.attr.state_checked)
-                        ), intArrayOf(primaryColor, outlineColor)
-                    )
-                }
-            },
-            update = { switchView ->
-                switchView.isChecked = checked
-                switchView.isEnabled = enabled
-                switchView.setOnCheckedChangeListener { _, isChecked ->
-                    if (enabled) onCheckedChange(isChecked)
-                }
-            },
-        )
-    }
-}
-
 
 @Composable
 fun ImageOptionsDialog(

@@ -20,6 +20,7 @@
 package org.codeberg.aimapp
 
 import android.annotation.SuppressLint
+import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Bundle
 import android.view.ViewGroup
@@ -27,24 +28,30 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -53,24 +60,35 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.codeberg.aimapp.ui.BindDirDialog
+import org.codeberg.aimapp.ui.CardPosition
+import org.codeberg.aimapp.ui.GroupedListSpacing
+import org.codeberg.aimapp.ui.GroupedRow
 import org.codeberg.aimapp.ui.ImageOptionsDialog
 import org.codeberg.aimapp.ui.PartitionPickerDialog
-import org.codeberg.aimapp.ui.PreferenceCategory
-import org.codeberg.aimapp.ui.PreferenceItem
-import org.codeberg.aimapp.ui.SwitchPreferenceItem
+import org.codeberg.aimapp.ui.ScreenScaffold
+import org.codeberg.aimapp.ui.buttonShape
+import org.codeberg.aimapp.ui.positionFor
+import org.codeberg.aimapp.ui.screenContentPadding
 import org.codeberg.aimapp.ui.theme.AimTheme
 import kotlin.coroutines.resume
 
@@ -98,7 +116,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@SuppressLint("SdCardPath")
+@SuppressLint("SdCardPath", "MissingHapticFeedback")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
@@ -244,7 +262,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
         )
     }
 
-    Scaffold(
+    ScreenScaffold(
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -253,17 +271,21 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                 title = { Text(stringResource(R.string.app_name)) }, scrollBehavior = scrollBehavior
             )
         },
-        snackbarHost = { }) { padding ->
+    ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .screenContentPadding(padding)
         ) {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 if (showEnv) {
                     item(key = "cat_env") {
-                        PreferenceCategory(title = stringResource(R.string.pref_header_environment)) {
-                            PreferenceItem(
+                        GroupedSectionHeader(text = stringResource(R.string.pref_header_environment))
+                        GroupedRow(
+                            position = positionFor(1, 2),
+                            modifier = Modifier.alpha(if (canAct) 1f else 0.38f),
+                        ) {
+                            GroupedTextContent(
                                 title = stringResource(R.string.pref_root_busybox_status_name),
                                 summary = buildString {
                                     append(envStatus.rootMessage)
@@ -271,131 +293,178 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                                     append(envStatus.busyboxMessage)
                                     if (envStatus.busyboxPath.isNotBlank()) append(" (${envStatus.busyboxPath})")
                                 },
-                                enabled = canAct,
-                                summaryColor = if (envStatus.rootAvailable && envStatus.busyboxAvailable) MaterialTheme.colorScheme.onSurfaceVariant
-                                else MaterialTheme.colorScheme.error
+                                summaryColor = if (envStatus.rootAvailable && envStatus.busyboxAvailable) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                },
                             )
-                            PreferenceItem(
+                        }
+                        GroupedRow(
+                            position = positionFor(2, 2),
+                            modifier = Modifier.alpha(if (canAct) 1f else 0.38f),
+                            onClick = if (canAct) ({ viewModel.checkEnvironment() }) else null,
+                        ) {
+                            GroupedTextContent(
                                 title = stringResource(R.string.pref_retry_checks_name),
                                 summary = stringResource(R.string.pref_retry_checks_desc),
-                                enabled = canAct,
-                                onClick = { viewModel.checkEnvironment() },
                             )
                         }
                     }
                 }
-                item(key = "cat_images_header") {
-                    PreferenceCategory(title = stringResource(R.string.pref_header_images)) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 1.dp)
-                        )
-                        PreferenceItem(
+                item(key = "cat_images") {
+                    GroupedSectionHeader(text = stringResource(R.string.pref_header_images))
+                    GroupedRow(
+                        position = CardPosition.Solo,
+                        modifier = Modifier.alpha(if (canAct) 1f else 0.38f),
+                        onClick = if (canAct) {
+                            { picker.launch(arrayOf("application/octet-stream", "*/*")) }
+                        } else null,
+                    ) {
+                        GroupedTextContent(
                             title = stringResource(R.string.pref_add_image_name),
                             summary = stringResource(R.string.pref_add_image_desc),
-                            enabled = canAct,
-                            onClick = { picker.launch(arrayOf("application/octet-stream", "*/*")) })
+                        )
+                    }
+                    if (images.isEmpty()) {
+                        Spacer(modifier = Modifier.height(GroupedListSpacing))
+                        GroupedRow(
+                            position = CardPosition.Solo,
+                            modifier = Modifier.alpha(0.38f),
+                        ) {
+                            GroupedTextContent(
+                                title = stringResource(R.string.pref_no_images_name),
+                                summary = stringResource(R.string.pref_no_images_desc),
+                            )
+                        }
                     }
                 }
                 itemsIndexed(items = images, key = { _, img -> "img_${img.path}" }) { _, img ->
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SwitchPreferenceItem(
-                        title = img.displayName,
-                        summary = img.path,
-                        checked = img.enabled,
-                        enabled = canAct && envStatus.ready,
-                        onCheckedChange = { enabled -> viewModel.toggleImage(img.path, enabled) },
-                        onClick = { dialogImagePath = img.path })
-                }
-                val mountedImages = images.filter { it.isMounted }
-                item {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    HorizontalDivider()
-                }
-                if (images.isEmpty()) {
-                    item(key = "cat_no_images") {
-                        PreferenceCategory(title = stringResource(R.string.pref_header_images)) {
-                            PreferenceItem(
-                                title = stringResource(R.string.pref_no_images_name),
-                                summary = stringResource(R.string.pref_no_images_desc),
-                                enabled = false
-                            )
+                    Spacer(modifier = Modifier.height(GroupedListSpacing))
+                    GroupedRow(
+                        position = CardPosition.Solo,
+                        modifier = Modifier.alpha(if (canAct && envStatus.ready) 1f else 0.38f),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .then(
+                                    if (canAct && envStatus.ready) {
+                                        Modifier.combinedClickable(onClick = { dialogImagePath = img.path })
+                                    } else Modifier
+                                )
+                                .padding(end = 8.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.Center) {
+                                Text(
+                                    text = img.displayName,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = img.path,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
+                        VerticalDivider(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .padding(vertical = 8.dp)
+                                .width(1.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                        )
+                        AimSwitch(
+                            checked = img.enabled,
+                            enabled = canAct && envStatus.ready,
+                            onCheckedChange = { enabled -> viewModel.toggleImage(img.path, enabled) },
+                        )
                     }
                 }
+                val mountedImages = images.filter { it.isMounted }
                 item(key = "cat_active_mounts") {
-                    PreferenceCategory(title = stringResource(R.string.pref_header_active_mounts)) {
-                        if (mountedImages.isNotEmpty()) {
-                            val mountsSummary = mountedImages.joinToString("\n") { img ->
-                                val stem = img.mountedImage?.mountPoint?.substringAfterLast('/')
-                                    ?: img.displayName
-                                val imageBindDir = img.bindDir ?: bindDir
-                                val isCustomBind = img.bindDir != null
-                                val paths = buildList {
-                                    if (img.isExposed) add("content://aim/$stem")
-                                    if (img.isStorageExposed) {
-                                        add(if (isCustomBind) imageBindDir else "$imageBindDir/$stem")
-                                    }
-                                    if (isEmpty()) add("/data/data/$pkgName/mounts/$stem")
+                    GroupedSectionHeader(text = stringResource(R.string.pref_header_active_mounts))
+                    if (mountedImages.isNotEmpty()) {
+                        val mountsSummary = mountedImages.joinToString("\n") { img ->
+                            val stem = img.mountedImage?.mountPoint?.substringAfterLast('/')
+                                ?: img.displayName
+                            val imageBindDir = img.bindDir ?: bindDir
+                            val isCustomBind = img.bindDir != null
+                            val paths = buildList {
+                                if (img.isExposed) add("content://aim/$stem")
+                                if (img.isStorageExposed) {
+                                    add(if (isCustomBind) imageBindDir else "$imageBindDir/$stem")
                                 }
-                                "${img.displayName} (${paths.joinToString(", ")})"
+                                if (isEmpty()) add("/data/data/$pkgName/mounts/$stem")
                             }
-                            PreferenceItem(
+                            "${img.displayName} (${paths.joinToString(", ")})"
+                        }
+                        GroupedRow(position = CardPosition.Solo) {
+                            GroupedTextContent(
                                 title = stringResource(R.string.mounted_images_title),
-                                summary = mountsSummary
+                                summary = mountsSummary,
                             )
-                        } else {
-                            PreferenceItem(
+                        }
+                    } else {
+                        GroupedRow(
+                            position = CardPosition.Solo,
+                            modifier = Modifier.alpha(0.38f),
+                        ) {
+                            GroupedTextContent(
                                 title = stringResource(R.string.pref_no_mounts_name),
                                 summary = stringResource(R.string.pref_no_mounts_desc),
-                                enabled = false
                             )
                         }
                     }
                 }
                 item(key = "apply_settings") {
-                    PreferenceItem(
-                        title = stringResource(R.string.pref_apply_settings_name),
-                        summary = stringResource(R.string.pref_apply_settings_desc),
+                    Button(
+                        onClick = { viewModel.applySettings() },
                         enabled = canAct && envStatus.ready,
-                        onClick = { viewModel.applySettings() })
-                }
-                item {
-                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp)
+                            .padding(top = GroupedListSpacing),
+                        shape = buttonShape(position = CardPosition.Solo, isShown = false),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
                     ) {
-                        HorizontalDivider()
+                        Text(
+                            text = stringResource(R.string.pref_apply_settings_name),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                     }
                 }
                 item(key = "cat_settings") {
-                    PreferenceCategory(title = stringResource(R.string.pref_header_settings)) {
-                        PreferenceItem(
+                    GroupedSectionHeader(text = stringResource(R.string.pref_header_settings))
+                    GroupedRow(
+                        position = CardPosition.Solo,
+                        modifier = Modifier.alpha(if (canAct) 1f else 0.38f),
+                        onClick = if (canAct) ({ showBindDirEdit = true }) else null,
+                        onLongClick = if (canAct) {
+                            { viewModel.setBindDir("/storage/emulated/0/mounts") }
+                        } else null,
+                    ) {
+                        GroupedTextContent(
                             title = stringResource(R.string.pref_bindmount_dir_name),
                             summary = bindDir,
-                            enabled = canAct,
-                            onClick = { showBindDirEdit = true },
-                            onLongClick = { viewModel.setBindDir("/storage/emulated/0/mounts") })
-                    }
-                }
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                    ) {
-                        HorizontalDivider()
+                        )
                     }
                 }
                 item(key = "cat_about") {
-                    PreferenceCategory(title = stringResource(R.string.pref_header_about)) {
-                        val uriHandler = LocalUriHandler.current
-                        PreferenceItem(
+                    GroupedSectionHeader(text = stringResource(R.string.pref_header_about))
+                    val uriHandler = LocalUriHandler.current
+                    GroupedRow(
+                        position = CardPosition.Solo,
+                        onClick = { uriHandler.openUri("https://github.com/jeeneo/aim") },
+                    ) {
+                        GroupedTextContent(
                             title = stringResource(R.string.pref_version_name),
                             summary = versionName,
-                            onClick = { uriHandler.openUri("https://github.com/jeeneo/aim") })
+                        )
                     }
                 }
             }
@@ -404,4 +473,82 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
             }
         }
     }
+}
+
+@Composable
+private fun GroupedSectionHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
+    )
+}
+
+@Composable
+private fun GroupedTextContent(
+    title: String,
+    summary: String? = null,
+    summaryColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
+    Column(verticalArrangement = Arrangement.Center) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (summary != null) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.bodyMedium,
+                color = summaryColor,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AimSwitch(
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val primaryColor = MaterialTheme.colorScheme.primary.toArgb()
+    val onPrimaryColor = MaterialTheme.colorScheme.onPrimary.toArgb()
+    val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant.toArgb()
+    val outlineColor = MaterialTheme.colorScheme.outline.toArgb()
+    AndroidView(
+        modifier = Modifier.padding(end = 2.dp),
+        factory = { context ->
+            MaterialSwitch(context).apply {
+                trackTintList = ColorStateList(
+                    arrayOf(
+                        intArrayOf(android.R.attr.state_checked),
+                        intArrayOf(-android.R.attr.state_checked)
+                    ), intArrayOf(primaryColor, surfaceVariantColor)
+                )
+                thumbTintList = ColorStateList(
+                    arrayOf(
+                        intArrayOf(android.R.attr.state_checked),
+                        intArrayOf(-android.R.attr.state_checked)
+                    ), intArrayOf(onPrimaryColor, outlineColor)
+                )
+                trackDecorationTintList = ColorStateList(
+                    arrayOf(
+                        intArrayOf(android.R.attr.state_checked),
+                        intArrayOf(-android.R.attr.state_checked)
+                    ), intArrayOf(primaryColor, outlineColor)
+                )
+            }
+        },
+        update = { switchView ->
+            switchView.isChecked = checked
+            switchView.isEnabled = enabled
+            switchView.setOnCheckedChangeListener { _, isChecked ->
+                if (enabled) onCheckedChange(isChecked)
+            }
+        },
+    )
 }
