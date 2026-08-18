@@ -1,25 +1,11 @@
-/**
- * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 package org.codeberg.aimapp
 
 import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import org.codeberg.aimapp.utils.SAFImageProvider
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -54,9 +40,9 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testSanitizeDisplayName_removesSlashes() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val method =
-            ImageProvider::class.java.getDeclaredMethod("sanitiseDisplayName", String::class.java)
+            SAFImageProvider::class.java.getDeclaredMethod("sanitiseDisplayName", String::class.java)
         method.isAccessible = true
 
         val result = method.invoke(provider, "test/file.txt") as String
@@ -65,9 +51,9 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testSanitizeDisplayName_removesNullBytes() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val method =
-            ImageProvider::class.java.getDeclaredMethod("sanitiseDisplayName", String::class.java)
+            SAFImageProvider::class.java.getDeclaredMethod("sanitiseDisplayName", String::class.java)
         method.isAccessible = true
 
         val result = method.invoke(provider, "test\u0000file.txt") as String
@@ -76,9 +62,9 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testSanitizeDisplayName_rejectsDot() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val method =
-            ImageProvider::class.java.getDeclaredMethod("sanitiseDisplayName", String::class.java)
+            SAFImageProvider::class.java.getDeclaredMethod("sanitiseDisplayName", String::class.java)
         method.isAccessible = true
 
         try {
@@ -91,9 +77,9 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testSanitizeDisplayName_rejectsDoubleDot() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val method =
-            ImageProvider::class.java.getDeclaredMethod("sanitiseDisplayName", String::class.java)
+            SAFImageProvider::class.java.getDeclaredMethod("sanitiseDisplayName", String::class.java)
         method.isAccessible = true
 
         try {
@@ -106,9 +92,9 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testSanitizeDisplayName_rejectsEmpty() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val method =
-            ImageProvider::class.java.getDeclaredMethod("sanitiseDisplayName", String::class.java)
+            SAFImageProvider::class.java.getDeclaredMethod("sanitiseDisplayName", String::class.java)
         method.isAccessible = true
 
         try {
@@ -121,9 +107,9 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testSanitizeDisplayName_rejectsBlank() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val method =
-            ImageProvider::class.java.getDeclaredMethod("sanitiseDisplayName", String::class.java)
+            SAFImageProvider::class.java.getDeclaredMethod("sanitiseDisplayName", String::class.java)
         method.isAccessible = true
 
         try {
@@ -145,8 +131,8 @@ class ImageProviderSecurityTest {
         try {
             Files.createSymbolicLink(symlinkFile.toPath(), targetFile.toPath())
 
-            val provider = ImageProvider()
-            val method = ImageProvider::class.java.getDeclaredMethod("safeDelete", File::class.java)
+            val provider = SAFImageProvider()
+            val method = SAFImageProvider::class.java.getDeclaredMethod("safeDelete", File::class.java)
             method.isAccessible = true
             method.invoke(provider, symlinkFile)
             assertFalse("Symlink should be deleted", symlinkFile.exists())
@@ -171,8 +157,8 @@ class ImageProviderSecurityTest {
         file2.writeText("content2")
 
         try {
-            val provider = ImageProvider()
-            val method = ImageProvider::class.java.getDeclaredMethod("safeDelete", File::class.java)
+            val provider = SAFImageProvider()
+            val method = SAFImageProvider::class.java.getDeclaredMethod("safeDelete", File::class.java)
             method.isAccessible = true
             method.invoke(provider, parentDir)
             assertFalse("Parent should be deleted", parentDir.exists())
@@ -184,7 +170,7 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testIsChildDocument_preventsPathTraversal() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val mountPoint = File(mountsDir, "test_mount")
         mountPoint.mkdirs()
 
@@ -200,7 +186,7 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testIsChildDocument_rootNotChildOfRoot() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         assertFalse(
             "Root should not be child of itself", provider.isChildDocument("mounts", "mounts")
         )
@@ -208,9 +194,9 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testValidateDocumentId_rejectsNullBytes() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val method =
-            ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+            SAFImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
         method.isAccessible = true
         try {
             method.invoke(provider, "/valid\u0000inject")
@@ -222,9 +208,9 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testValidateDocumentId_rejectsNewlines() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val method =
-            ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+            SAFImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
         method.isAccessible = true
         try {
             method.invoke(provider, "/valid\nmalicious")
@@ -236,9 +222,9 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testValidateDocumentId_rejectsCarriageReturn() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val method =
-            ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+            SAFImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
         method.isAccessible = true
         try {
             method.invoke(provider, "/valid\rmalicious")
@@ -250,9 +236,9 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testValidateDocumentId_rejectsPathTraversal() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val method =
-            ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+            SAFImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
         method.isAccessible = true
         try {
             method.invoke(provider, "/data/../etc/passwd")
@@ -264,9 +250,9 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testValidateDocumentId_rejectsRelativePath() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val method =
-            ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+            SAFImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
         method.isAccessible = true
         try {
             method.invoke(provider, "relative/path")
@@ -278,9 +264,9 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testValidateDocumentId_rejectsOverlongId() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val method =
-            ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+            SAFImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
         method.isAccessible = true
         try {
             method.invoke(provider, "/" + "a".repeat(5_000))
@@ -292,18 +278,18 @@ class ImageProviderSecurityTest {
 
     @Test
     fun testValidateDocumentId_acceptsRootDocId() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val method =
-            ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+            SAFImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
         method.isAccessible = true
         method.invoke(provider, "mounts")
     }
 
     @Test
     fun testValidateDocumentId_acceptsValidAbsolutePath() {
-        val provider = ImageProvider()
+        val provider = SAFImageProvider()
         val method =
-            ImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
+            SAFImageProvider::class.java.getDeclaredMethod("validateDocumentId", String::class.java)
         method.isAccessible = true
         method.invoke(
             provider, "/data/user/0/org.codeberg.aimapp/files/mounts/test/file.txt"

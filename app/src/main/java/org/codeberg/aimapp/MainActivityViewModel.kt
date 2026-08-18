@@ -1,19 +1,4 @@
-/**
- * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 package org.codeberg.aimapp
 
@@ -26,17 +11,32 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.codeberg.aimapp.utils.ImagePathResolver
-import org.codeberg.aimapp.utils.PartitionEntry
-import org.codeberg.aimapp.utils.PartitionScheme
-import org.codeberg.aimapp.utils.validateBindDir
-import org.codeberg.aimapp.utils.validatePath
+import org.codeberg.aimapp.utils.SAFImageProvider
+import org.codeberg.aimapp.utils.disk.DetectFsResult
+import org.codeberg.aimapp.utils.disk.detectFilesystem
+import org.codeberg.aimapp.utils.mounts.BindResult
+import org.codeberg.aimapp.utils.mounts.EnvironmentStatus
+import org.codeberg.aimapp.utils.mounts.ImageStore
+import org.codeberg.aimapp.utils.mounts.MountManager
+import org.codeberg.aimapp.utils.mounts.MountMode
+import org.codeberg.aimapp.utils.mounts.MountResult
+import org.codeberg.aimapp.utils.mounts.MountedImage
+import org.codeberg.aimapp.utils.mounts.PartitionEntry
+import org.codeberg.aimapp.utils.mounts.PartitionScheme
+import org.codeberg.aimapp.utils.mounts.PartitionedImageResult
+import org.codeberg.aimapp.utils.mounts.generateMountStem
+import org.codeberg.aimapp.utils.paths.ImagePathResolver
+import org.codeberg.aimapp.utils.paths.validateBindDir
+import org.codeberg.aimapp.utils.paths.validatePath
 import java.io.File
-import java.util.concurrent.atomic.AtomicInteger
+
 
 data class ImportedImage(
     val path: String,
@@ -73,6 +73,14 @@ sealed interface Alert {
     data class Info(override val message: String) : Alert
 }
 
+enum class PartitionPickerOrigin {
+    /** Opened automatically because a mount attempt discovered partitions. */
+    MountFlow,
+
+    /** Opened explicitly by the user via "Change Partition" / "Partition Info". */
+    UserRequested,
+}
+
 data class PartitionState(
     val imagePath: String,
     val displayName: String,
@@ -80,6 +88,7 @@ data class PartitionState(
     val totalSizeBytes: Long,
     val scheme: PartitionScheme = PartitionScheme.MBR,
     val selectedPartitionIndex: Int? = null,
+    val origin: PartitionPickerOrigin,
 )
 
 class MainActivityViewModel(application: Application) : AndroidViewModel(application) {
@@ -94,7 +103,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     val mountManager = MountManager(
         application, object : MountManager.RootsChangedNotifier {
             override fun notify(context: Context) {
-                ImageProvider.notifyRootsChanged(context)
+                SAFImageProvider.notifyRootsChanged(context)
             }
         })
     private val mountedPartitionIndex = mutableMapOf<String, Int>()
@@ -103,9 +112,9 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     private data class BindState(val bindDir: String, val directMount: Boolean)
 
     private val mountedBindState = mutableMapOf<String, BindState>()
-    private val operationsInProgress = AtomicInteger(0)
-    private val _canAct = MutableStateFlow(true)
-    val canAct: StateFlow<Boolean> = _canAct
+    private val busyCount = MutableStateFlow(0)
+    val isBusy: StateFlow<Boolean> =
+        busyCount.map { it != 0 }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     private val _alerts = MutableStateFlow<List<Alert>>(emptyList())
     val alerts: StateFlow<List<Alert>> = _alerts
     private val _envChecked = MutableStateFlow(false)
@@ -124,7 +133,6 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         settingsPrefs.getString(KEY_BIND_DIR, DEFAULT_BIND_DIR) ?: DEFAULT_BIND_DIR
     )
     val bindDir: StateFlow<String> = _bindDir
-
 
     private fun errorText(
         throwable: Throwable,
@@ -147,18 +155,16 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         alert(Alert.Info(app.getString(R.string.alert_bind_dir_set, trimmed)))
     }
 
-    private fun refreshUiLock() {
-        _canAct.update { operationsInProgress.get() == 0 }
+    init {
+        checkEnvironment()
     }
 
-    private suspend fun <T> withLockedUi(block: suspend () -> T): T {
-        operationsInProgress.incrementAndGet()
-        refreshUiLock()
+    private suspend fun <T> withLockedUI(block: suspend () -> T): T {
+        busyCount.update { it + 1 }
         try {
             return block()
         } finally {
-            operationsInProgress.decrementAndGet()
-            refreshUiLock()
+            busyCount.update { it - 1 }
         }
     }
 
@@ -175,7 +181,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     private suspend fun refreshAndRebuild(notifySaf: Boolean = false) {
         withContext(Dispatchers.IO) { mountManager.refreshMountedImages() }
         rebuildImageList()
-        if (notifySaf) ImageProvider.notifyRootsChanged(getApplication())
+        if (notifySaf) SAFImageProvider.notifyRootsChanged(getApplication())
     }
 
     private suspend fun unmountWithCleanup(
@@ -314,7 +320,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
 
     fun checkEnvironment() {
         viewModelScope.launch {
-            withLockedUi {
+            withLockedUI {
                 try {
                     withContext(Dispatchers.IO) { mountManager.checkEnvironment() }
                     _envChecked.value = true
@@ -333,24 +339,24 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
 
     fun addImage(uri: Uri) {
         viewModelScope.launch {
-            withLockedUi {
+            withLockedUI {
                 val resolved = withContext(Dispatchers.IO) {
                     ImagePathResolver.resolve(getApplication(), uri)
                 }
                 resolved.error?.let {
                     alert(Alert.Failure(it))
-                    return@withLockedUi
+                    return@withLockedUI
                 }
                 val path = resolved.path.orEmpty()
                 val name = resolved.displayName ?: File(path).name
                 if (path.isBlank()) {
                     alert(Alert.Failure(app.getString(R.string.alert_could_not_resolve_path)))
-                    return@withLockedUi
+                    return@withLockedUI
                 }
                 val current = loadImportedImages()
                 if (current.any { it.path == path }) {
                     alert(Alert.Failure(app.getString(R.string.alert_image_already_in_list)))
-                    return@withLockedUi
+                    return@withLockedUI
                 }
                 // probe for partitions
                 val hasPartitions = withContext(Dispatchers.IO) {
@@ -374,7 +380,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
 
     fun removeImage(path: String) {
         viewModelScope.launch {
-            withLockedUi {
+            withLockedUI {
                 val current = loadImportedImages()
                 val img = current.find { it.path == path }
                 val ui = _images.value.find { it.path == path }
@@ -454,16 +460,14 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
 
     fun applySettings() {
         viewModelScope.launch {
-            withLockedUi {
+            withLockedUI {
                 val snapshot = _images.value
                 val allImported = loadImportedImages()
                 val errors = mutableListOf<String>()
-
                 applyUnmounts(snapshot, allImported, errors)
                 applyMounts(snapshot, allImported, errors)
                 applyRemounts(snapshot, allImported, errors)
                 applyStorageBind(snapshot, allImported, errors)
-
                 refreshAndRebuild(notifySaf = true)
                 if (errors.isNotEmpty()) alert(Alert.Failure(errors.joinToString("\n")))
                 else alert(Alert.Success(app.getString(R.string.alert_settings_applied_success)))
@@ -670,13 +674,14 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 totalSizeBytes = pr.tableInfo.totalSizeBytes,
                 scheme = pr.tableInfo.scheme,
                 selectedPartitionIndex = imported?.selectedPartitionIndex,
+                origin = PartitionPickerOrigin.MountFlow,
             )
         )
     }
 
     fun formatImage(path: String, fsType: String = "ext4") {
         viewModelScope.launch {
-            withLockedUi {
+            withLockedUI {
                 val ui = _images.value.find { it.path == path }
                 if (ui?.isMounted == true && ui.mountedImage != null) {
                     val unmountStem = mountedStem[path] ?: stemFor(path)
@@ -689,14 +694,14 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                                 )
                             )
                         )
-                        return@withLockedUi
+                        return@withLockedUI
                     }
                     mountedStem.remove(path)
                 }
                 // re-validate path immediately before format to close the TOCTOU window between unmount and format
                 if (!validatePath(path) || !path.trim().endsWith(".img", ignoreCase = true)) {
                     alert(Alert.Failure(app.getString(R.string.alert_path_validation_failed)))
-                    return@withLockedUi
+                    return@withLockedUI
                 }
                 val result = withContext(Dispatchers.IO) { mountManager.formatImage(path, fsType) }
                 result.onSuccess { msg ->
@@ -722,20 +727,25 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     fun dismissPartitionPicker() {
         val picker = _partitionPicker.value
         dequeueNextPartitionPicker()
-        if (picker != null) {
-            val wasMounted = _images.value.find { it.path == picker.imagePath }?.isMounted == true
-            if (!wasMounted) {
-                _images.update { list ->
-                    list.map { if (it.path == picker.imagePath) it.copy(enabled = false) else it }
-                }
+        if (picker != null && picker.origin == PartitionPickerOrigin.MountFlow) {
+            _images.update { list ->
+                list.map { if (it.path == picker.imagePath) it.copy(enabled = false) else it }
             }
         }
     }
 
     fun selectPartition(partition: PartitionEntry) {
         val picker = _partitionPicker.value ?: return
-        dequeueNextPartitionPicker()
-        updateImportedImage(picker.imagePath) {
+        savePartitionSelection(picker.imagePath, partition)
+        if (picker.origin == PartitionPickerOrigin.MountFlow) {
+            dequeueNextPartitionPicker()
+        } else {
+            _partitionPicker.update { it?.copy(selectedPartitionIndex = partition.index) }
+        }
+    }
+
+    private fun savePartitionSelection(imagePath: String, partition: PartitionEntry) {
+        updateImportedImage(imagePath) {
             it.copy(
                 selectedPartitionIndex = partition.index, diskLabel = partition.label
             )
@@ -750,7 +760,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
 
     fun changePartition(path: String) {
         viewModelScope.launch {
-            withLockedUi {
+            withLockedUI {
                 val imported = loadImportedImages().find { it.path == path }
                 val result = withContext(Dispatchers.IO) { mountManager.probePartitions(path) }
                 if (result != null) {
@@ -761,18 +771,18 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                             partitions = result.partitions,
                             totalSizeBytes = result.tableInfo.totalSizeBytes,
                             scheme = result.tableInfo.scheme,
-                            selectedPartitionIndex = imported?.selectedPartitionIndex
+                            selectedPartitionIndex = imported?.selectedPartitionIndex,
+                            origin = PartitionPickerOrigin.UserRequested,
                         )
                     )
                 } else {
                     val fileSize = withContext(Dispatchers.IO) { File(path).length() }
                     val detectedFs = try {
                         withContext(Dispatchers.IO) {
-                            when (val d =
-                                org.codeberg.aimapp.utils.detectFilesystem(app, path, "")) {
-                                is org.codeberg.aimapp.utils.DetectFsResult.Found -> d.fs
-                                is org.codeberg.aimapp.utils.DetectFsResult.Unknown -> null
-                                is org.codeberg.aimapp.utils.DetectFsResult.AccessError -> {
+                            when (val d = detectFilesystem(app, path, "")) {
+                                is DetectFsResult.Found -> d.fs
+                                is DetectFsResult.Unknown -> null
+                                is DetectFsResult.AccessError -> {
                                     Log.w(TAG, "fs access error probing $path: ${d.reason}")
                                     null
                                 }
@@ -803,6 +813,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                             totalSizeBytes = fileSize,
                             scheme = PartitionScheme.MBR,
                             selectedPartitionIndex = imported?.selectedPartitionIndex,
+                            origin = PartitionPickerOrigin.UserRequested,
                         )
                     )
                 }
@@ -836,6 +847,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     totalSizeBytes = pr.tableInfo.totalSizeBytes,
                     scheme = pr.tableInfo.scheme,
                     selectedPartitionIndex = null,
+                    origin = PartitionPickerOrigin.MountFlow,
                 )
             )
             return MountResult.PartitionedImage(pr)

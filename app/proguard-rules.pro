@@ -1,11 +1,11 @@
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
--keep class org.codeberg.aimapp.ImageProvider {
+-keep class org.codeberg.aimapp.utils.ImageProvider {
     public protected *;
 }
 
--keep class org.codeberg.aimapp.ImageStore {
+-keep class org.codeberg.aimapp.utils.mounts.ImageStore {
     public *;
 }
 
@@ -14,21 +14,21 @@
     public static ** valueOf(java.lang.String);
 }
 
--keepclassmembers class org.codeberg.aimapp.MountedImage { *; }
--keepclassmembers class org.codeberg.aimapp.PartitionedImageResult { *; }
--keepclassmembers class org.codeberg.aimapp.EnvironmentStatus { *; }
+-keepclassmembers class org.codeberg.aimapp.utils.mounts.MountedImage { *; }
+-keepclassmembers class org.codeberg.aimapp.utils.mounts.PartitionedImageResult { *; }
+-keepclassmembers class org.codeberg.aimapp.utils.mounts.EnvironmentStatus { *; }
 -keepclassmembers class org.codeberg.aimapp.ImportedImage { *; }
 -keepclassmembers class org.codeberg.aimapp.ImageInfo { *; }
 -keepclassmembers class org.codeberg.aimapp.PartitionState { *; }
--keepclassmembers class org.codeberg.aimapp.utils.ShellResult { *; }
--keepclassmembers class org.codeberg.aimapp.utils.PartitionEntry { *; }
--keepclassmembers class org.codeberg.aimapp.utils.PartitionTableInfo { *; }
--keepclassmembers class org.codeberg.aimapp.utils.ResolvedImage { *; }
--keepclassmembers class org.codeberg.aimapp.utils.PartitionedImageException { *; }
+-keepclassmembers class org.codeberg.aimapp.utils.shell.ShellResult { *; }
+-keepclassmembers class org.codeberg.aimapp.utils.mounts.PartitionEntry { *; }
+-keepclassmembers class org.codeberg.aimapp.utils.mounts.PartitionTableInfo { *; }
+-keepclassmembers class org.codeberg.aimapp.utils.paths.ResolvedImage { *; }
+-keepclassmembers class org.codeberg.aimapp.utils.disk.PartitionedImageException { *; }
 
--keep class org.codeberg.aimapp.utils.ShellCmd { *; }
--keep class org.codeberg.aimapp.utils.ShellArg { *; }
--keep class org.codeberg.aimapp.utils.RootShell { *; }
+-keep class org.codeberg.aimapp.utils.shell.ShellCmd { *; }
+-keep class org.codeberg.aimapp.utils.shell.ShellArg { *; }
+-keep class org.codeberg.aimapp.utils.shell.RootShell { *; }
 
 -keep class android.util.Log { *; }
 -keep class java.util.logging.** { *; }

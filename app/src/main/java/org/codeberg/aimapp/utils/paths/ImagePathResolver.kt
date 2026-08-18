@@ -1,26 +1,12 @@
-/**
- * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: GPL-3.0-or-later
 
-package org.codeberg.aimapp.utils
+package org.codeberg.aimapp.utils.paths
 
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import android.util.Log
 import org.codeberg.aimapp.R
 import java.io.File
 
@@ -36,15 +22,29 @@ object ImagePathResolver {
         return resolveStoragePath(ctx, uri)?.let { path ->
             File(path).takeIf { it.exists() }?.let {
                 ResolvedImage(it.absolutePath, name)
+            } ?: run {
+                Log.w(TAG, "Resolved path does not exist: $path (uri=$uri, name=$name)")
+                null
             }
-        } ?: ResolvedImage(error = ctx.getString(R.string.error_cannot_resolve_path, name))
+        } ?: run {
+            Log.w(TAG, "Could not resolve path for uri=$uri (name=$name)")
+            ResolvedImage(error = ctx.getString(R.string.error_cannot_resolve_path, name))
+        }
     }
 
     // attempts to resolve a SAF URI to browsable path (`/storage/emulated/0` is good enough for most access cases here)
     private fun resolveStoragePath(ctx: Context, uri: Uri): String? = when {
         uri.scheme.equals("file", true) -> uri.path
-        !uri.scheme.equals("content", true) -> null
-        !DocumentsContract.isDocumentUri(ctx, uri) -> null
+        !uri.scheme.equals("content", true) -> {
+            Log.w(TAG, "Unsupported scheme: ${uri.scheme} (uri=$uri)")
+            null
+        }
+
+        !DocumentsContract.isDocumentUri(ctx, uri) -> {
+            Log.w(TAG, "Not a document uri: $uri")
+            null
+        }
+
         else -> {
             val docId = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull().orEmpty()
             when {
@@ -56,13 +56,21 @@ object ImagePathResolver {
                             "home" -> "/storage/emulated/0/Documents/${parts[1]}"
                             else -> "/storage/${parts[0]}/${parts[1]}"
                         }
+                    } ?: run {
+                        Log.w(TAG, "Malformed externalstorage docId: '$docId' (uri=$uri)")
+                        null
                     }
                 }
 
-                else -> null
+                else -> {
+                    Log.w(TAG, "Unsupported authority: ${uri.authority}, docId='$docId' (uri=$uri)")
+                    null
+                }
             }
         }
     }
+
+    private const val TAG = "ImagePathResolver"
 
     private fun queryName(ctx: Context, uri: Uri): String? =
         ctx.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)

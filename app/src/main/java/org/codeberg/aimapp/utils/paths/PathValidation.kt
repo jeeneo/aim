@@ -1,25 +1,11 @@
-/**
- * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: GPL-3.0-or-later
 
-package org.codeberg.aimapp.utils
+package org.codeberg.aimapp.utils.paths
 
 import android.annotation.SuppressLint
 import android.content.Context
 import org.codeberg.aimapp.R
+import java.io.File
 
 private val PATH_FORBIDDEN = charArrayOf(
     '\u0000', '\n', '\r',
@@ -42,10 +28,10 @@ private data class AllowedZone(val prefix: String, val minDepth: Int)
 @SuppressLint("SdCardPath")
 private val ALLOWED_ZONES = listOf(
     // only allow bind mounts on these locations: prefix, minDepth
-    AllowedZone("/storage/emulated/", 2),           // /storage/emulated/{userId}/{subfolder}
-    AllowedZone("/data/media/", 2),                 // /data/media/{userId}/{subfolder}
-    AllowedZone("/sdcard/", 1),                     // /sdcard/{subfolder}
-    AllowedZone("/mnt/media_rw/", 2),               // /mnt/media_rw/{deviceId}/{subfolder}
+    AllowedZone("/storage/emulated/", 2),  // /storage/emulated/{userId}/{subfolder}
+    AllowedZone("/data/media/", 2),        // /data/media/{userId}/{subfolder}
+    AllowedZone("/sdcard/", 1),            // /sdcard/{subfolder}
+    AllowedZone("/mnt/media_rw/", 2),      // /mnt/media_rw/{deviceId}/{subfolder}
 )
 
 @SuppressLint("SdCardPath")
@@ -60,10 +46,10 @@ fun validateBindDir(ctx: Context, dir: String): String? {
     if (dir.isBlank()) return ctx.getString(R.string.error_dir_must_not_be_empty)
     if (!dir.startsWith('/')) return ctx.getString(R.string.error_dir_must_be_absolute)
     if (!validatePath(dir)) return ctx.getString(R.string.error_dir_invalid_chars)
-    val normalised = java.io.File(dir).normalize().path.trimEnd('/')
+    val normalised = File(dir).normalize().path.trimEnd('/')
     if (normalised.isEmpty()) return ctx.getString(R.string.error_dir_not_root_fs)
     val canonical = try {
-        java.io.File(normalised).canonicalPath
+        File(normalised).canonicalPath
     } catch (e: Exception) {
         return ctx.getString(R.string.error_resolve_canonical, e.message ?: "")
     }

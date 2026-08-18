@@ -1,30 +1,25 @@
-/**
- * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 // why dont we just use `partx`?
 // decisive decision to implement custom parsing logic cause it's uhhh yeah (T^T)
 // 1) parsing logic is hard 2) why add a new binary requirement?
 
-package org.codeberg.aimapp.utils
+package org.codeberg.aimapp.utils.mounts
 
 import android.content.Context
 import android.util.Log
-import org.codeberg.aimapp.FsType
 import org.codeberg.aimapp.R
+import org.codeberg.aimapp.utils.disk.VALID_FAT_BPS
+import org.codeberg.aimapp.utils.disk.VALID_FAT_NFATS
+import org.codeberg.aimapp.utils.disk.detectFsByMagic
+import org.codeberg.aimapp.utils.disk.hexProbe
+import org.codeberg.aimapp.utils.disk.identifyUnsupportedFs
+import org.codeberg.aimapp.utils.paths.labelToMountStem
+import org.codeberg.aimapp.utils.paths.probeLabel
+import org.codeberg.aimapp.utils.shell.RootShell
+import org.codeberg.aimapp.utils.shell.ShellArg
+import org.codeberg.aimapp.utils.shell.ShellCmd
+import org.codeberg.aimapp.utils.shell.pathArg
 
 private const val TAG = "PartitionTable"
 private val PARTITION_TYPE_NAMES = mapOf(
@@ -126,7 +121,10 @@ fun probePartitionTable(ctx: Context, imagePath: String, busyboxBin: String): Pa
         entries.removeAll { p ->
             val end = p.offsetBytes + p.sizeBytes
             if (p.offsetBytes < 0 || p.sizeBytes < 0 || end < 0 || p.offsetBytes > totalSize) {
-                Log.w(TAG, "P${p.index}: partition boundaries invalid or exceed image size, skipping")
+                Log.w(
+                    TAG,
+                    "P${p.index}: partition boundaries invalid or exceed image size, skipping"
+                )
                 true
             } else false
         }

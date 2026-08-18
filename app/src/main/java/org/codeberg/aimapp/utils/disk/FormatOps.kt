@@ -1,29 +1,21 @@
-/**
- * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: GPL-3.0-or-later
 
-package org.codeberg.aimapp.utils
+package org.codeberg.aimapp.utils.disk
 
 import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
-import org.codeberg.aimapp.OpResult
 import org.codeberg.aimapp.R
+import org.codeberg.aimapp.utils.mounts.OpResult
+import org.codeberg.aimapp.utils.paths.validatePath
+import org.codeberg.aimapp.utils.shell.RootShell
+import org.codeberg.aimapp.utils.shell.ShellArg
+import org.codeberg.aimapp.utils.shell.ShellCmd
+import org.codeberg.aimapp.utils.shell.ShellResult
+import org.codeberg.aimapp.utils.shell.pathArg
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.Paths
 
 private const val TAG = "FormatOps"
 
@@ -76,13 +68,13 @@ fun formatImage(
             )
         )
     )
-    val nioPath = java.nio.file.Paths.get(canonical)
+    val nioPath = Paths.get(canonical)
     if (!Files.exists(nioPath) || !Files.isRegularFile(nioPath)) return OpResult.failure(
         Exception(
             ctx.getString(R.string.error_image_not_regular_file)
         )
     )
-    if (Files.isSymbolicLink(java.nio.file.Paths.get(imagePath))) return OpResult.failure(
+    if (Files.isSymbolicLink(Paths.get(imagePath))) return OpResult.failure(
         Exception(ctx.getString(R.string.error_symlinks_not_allowed))
     )
     val imgArg = pathArg(canonical)

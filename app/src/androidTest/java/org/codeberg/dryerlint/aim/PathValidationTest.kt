@@ -1,29 +1,14 @@
-/**
- * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 package org.codeberg.aimapp
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import org.codeberg.aimapp.utils.isValidPath
-import org.codeberg.aimapp.utils.sanitizeStem
-import org.codeberg.aimapp.utils.validateBindDir
-import org.codeberg.aimapp.utils.validatePath
+import org.codeberg.aimapp.utils.paths.isValidPath
+import org.codeberg.aimapp.utils.paths.sanitizeStem
+import org.codeberg.aimapp.utils.paths.validateBindDir
+import org.codeberg.aimapp.utils.paths.validatePath
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull

@@ -1,4 +1,4 @@
-package org.codeberg.aimapp
+package org.codeberg.aimapp.utils.mounts
 
 sealed class OpResult {
     data class Success(val output: String) : OpResult()

@@ -1,21 +1,6 @@
-/**
- * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: GPL-3.0-or-later
 
-package org.codeberg.aimapp
+package org.codeberg.aimapp.utils.mounts
 
 import android.content.Context
 import android.util.Log
@@ -24,32 +9,25 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.codeberg.aimapp.utils.ALLOWED_CHMOD_MODES
-import org.codeberg.aimapp.utils.FS_LIST
-import org.codeberg.aimapp.utils.PartitionEntry
-import org.codeberg.aimapp.utils.PartitionTableInfo
-import org.codeberg.aimapp.utils.PartitionedImageException
-import org.codeberg.aimapp.utils.RootShell
-import org.codeberg.aimapp.utils.ShellArg
-import org.codeberg.aimapp.utils.ShellCmd
-import org.codeberg.aimapp.utils.buildMountOpts
+import org.codeberg.aimapp.R
 import org.codeberg.aimapp.utils.checkEnv
-import org.codeberg.aimapp.utils.detectFilesystem
-import org.codeberg.aimapp.utils.doMount
-import org.codeberg.aimapp.utils.enumArg
-import org.codeberg.aimapp.utils.filenameToMountStem
-import org.codeberg.aimapp.utils.formatImage
-import org.codeberg.aimapp.utils.isValidLabelStem
-import org.codeberg.aimapp.utils.loopDevArg
-import org.codeberg.aimapp.utils.makeAccessible
-import org.codeberg.aimapp.utils.pathArg
-import org.codeberg.aimapp.utils.probePartitionFilesystems
-import org.codeberg.aimapp.utils.probePartitionTable
-import org.codeberg.aimapp.utils.restorePermissions
-import org.codeberg.aimapp.utils.sanitizeStem
-import org.codeberg.aimapp.utils.secontextArg
-import org.codeberg.aimapp.utils.validateBindDir
-import org.codeberg.aimapp.utils.validatePath
+import org.codeberg.aimapp.utils.disk.DetectFsResult
+import org.codeberg.aimapp.utils.disk.FS_LIST
+import org.codeberg.aimapp.utils.disk.PartitionedImageException
+import org.codeberg.aimapp.utils.disk.detectFilesystem
+import org.codeberg.aimapp.utils.disk.formatImage
+import org.codeberg.aimapp.utils.paths.filenameToMountStem
+import org.codeberg.aimapp.utils.paths.isValidLabelStem
+import org.codeberg.aimapp.utils.paths.sanitizeStem
+import org.codeberg.aimapp.utils.paths.validateBindDir
+import org.codeberg.aimapp.utils.paths.validatePath
+import org.codeberg.aimapp.utils.shell.RootShell
+import org.codeberg.aimapp.utils.shell.ShellArg
+import org.codeberg.aimapp.utils.shell.ShellCmd
+import org.codeberg.aimapp.utils.shell.enumArg
+import org.codeberg.aimapp.utils.shell.loopDevArg
+import org.codeberg.aimapp.utils.shell.pathArg
+import org.codeberg.aimapp.utils.shell.secontextArg
 import java.io.File
 
 enum class MountMode { LOCAL, PUBLIC }
@@ -293,13 +271,13 @@ class MountManager(
 
         val fsType = try {
             when (val detect = detectFilesystem(ctx, imagePath, busyboxBin)) {
-                is org.codeberg.aimapp.utils.DetectFsResult.Found -> detect.fs
-                is org.codeberg.aimapp.utils.DetectFsResult.Unknown -> {
+                is DetectFsResult.Found -> detect.fs
+                is DetectFsResult.Unknown -> {
                     Log.w(TAG, "fs detection failed for $imagePath (${imageFile.length()} bytes)")
                     return fail(R.string.error_unsupported_filesystem)
                 }
 
-                is org.codeberg.aimapp.utils.DetectFsResult.AccessError -> {
+                is DetectFsResult.AccessError -> {
                     Log.w(TAG, "fs access error for $imagePath: ${detect.reason}")
                     return fail(R.string.error_ksu_or_alike_permission)
                 }
@@ -525,7 +503,7 @@ class MountManager(
     }
 
     /**
-     * canonicalizes and double-checks [bindDir] against [validateBindDir] to detect symlink
+     * canonicalizes and double-checks [bindDir] against [org.codeberg.aimapp.utils.paths.validateBindDir] to detect symlink
      * races between the two resolutions. Returns null if the path is rejected at any stage.
      */
     private fun resolveAndValidateBindDir(bindDir: String): String? {

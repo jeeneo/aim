@@ -1,21 +1,4 @@
-/**
- * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
-package org.codeberg.aimapp
+package org.codeberg.aimapp.utils
 
 import android.content.Context
 import android.database.Cursor
@@ -23,19 +6,20 @@ import android.database.MatrixCursor
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
-import android.provider.DocumentsContract.Document
-import android.provider.DocumentsContract.Root
 import android.provider.DocumentsProvider
 import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
 import android.util.Log
 import android.webkit.MimeTypeMap
+import org.codeberg.aimapp.R
+import org.codeberg.aimapp.utils.mounts.ImageStore
+import org.codeberg.aimapp.utils.mounts.generateMountStem
 import java.io.File
 import java.io.FileNotFoundException
 import java.nio.file.Files
 
-class ImageProvider : DocumentsProvider() {
+class SAFImageProvider : DocumentsProvider() {
     private val ctx: Context by lazy { requireContext() }
     private val mountsDir by lazy { File(ctx.filesDir, "mounts") }
 
@@ -46,20 +30,20 @@ class ImageProvider : DocumentsProvider() {
         private const val ROOT_DOC_ID = "mounts"
         private const val MAX_DOC_ID_LENGTH = 4096
         private val ROOT_PROJECTION = arrayOf(
-            Root.COLUMN_ROOT_ID,
-            Root.COLUMN_FLAGS,
-            Root.COLUMN_ICON,
-            Root.COLUMN_TITLE,
-            Root.COLUMN_SUMMARY,
-            Root.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Root.COLUMN_ROOT_ID,
+            DocumentsContract.Root.COLUMN_FLAGS,
+            DocumentsContract.Root.COLUMN_ICON,
+            DocumentsContract.Root.COLUMN_TITLE,
+            DocumentsContract.Root.COLUMN_SUMMARY,
+            DocumentsContract.Root.COLUMN_DOCUMENT_ID,
         )
         private val DOC_PROJECTION = arrayOf(
-            Document.COLUMN_DOCUMENT_ID,
-            Document.COLUMN_DISPLAY_NAME,
-            Document.COLUMN_MIME_TYPE,
-            Document.COLUMN_SIZE,
-            Document.COLUMN_LAST_MODIFIED,
-            Document.COLUMN_FLAGS,
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+            DocumentsContract.Document.COLUMN_FLAGS,
         )
 
         fun notifyRootsChanged(ctx: Context) {
@@ -181,15 +165,15 @@ class ImageProvider : DocumentsProvider() {
     override fun queryRoots(projection: Array<out String>?): Cursor {
         val result = MatrixCursor(projection ?: ROOT_PROJECTION)
         result.newRow().apply {
-            add(Root.COLUMN_ROOT_ID, ROOT_ID)
+            add(DocumentsContract.Root.COLUMN_ROOT_ID, ROOT_ID)
             add(
-                Root.COLUMN_FLAGS,
-                Root.FLAG_SUPPORTS_CREATE or Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_IS_CHILD,
+                DocumentsContract.Root.COLUMN_FLAGS,
+                DocumentsContract.Root.FLAG_SUPPORTS_CREATE or DocumentsContract.Root.FLAG_LOCAL_ONLY or DocumentsContract.Root.FLAG_SUPPORTS_IS_CHILD,
             )
-            add(Root.COLUMN_ICON, R.drawable.aim_logo)
-            add(Root.COLUMN_TITLE, ctx.getString(R.string.app_name))
-            add(Root.COLUMN_SUMMARY, ctx.getString(R.string.mounted_images_title))
-            add(Root.COLUMN_DOCUMENT_ID, ROOT_DOC_ID)
+            add(DocumentsContract.Root.COLUMN_ICON, R.drawable.aim_logo)
+            add(DocumentsContract.Root.COLUMN_TITLE, ctx.getString(R.string.app_name))
+            add(DocumentsContract.Root.COLUMN_SUMMARY, ctx.getString(R.string.mounted_images_title))
+            add(DocumentsContract.Root.COLUMN_DOCUMENT_ID, ROOT_DOC_ID)
         }
         result.setNotificationUri(
             ctx.contentResolver,
@@ -203,12 +187,17 @@ class ImageProvider : DocumentsProvider() {
         val result = MatrixCursor(projection ?: DOC_PROJECTION)
         if (documentId == ROOT_DOC_ID) {
             result.newRow().apply {
-                add(Document.COLUMN_DOCUMENT_ID, ROOT_DOC_ID)
-                add(Document.COLUMN_DISPLAY_NAME, ctx.getString(R.string.app_name))
-                add(Document.COLUMN_MIME_TYPE, Document.MIME_TYPE_DIR)
-                add(Document.COLUMN_SIZE, 0L)
-                add(Document.COLUMN_LAST_MODIFIED, 0L)
-                add(Document.COLUMN_FLAGS, 0)
+                add(DocumentsContract.Document.COLUMN_DOCUMENT_ID, ROOT_DOC_ID)
+                add(
+                    DocumentsContract.Document.COLUMN_DISPLAY_NAME, ctx.getString(R.string.app_name)
+                )
+                add(
+                    DocumentsContract.Document.COLUMN_MIME_TYPE,
+                    DocumentsContract.Document.MIME_TYPE_DIR
+                )
+                add(DocumentsContract.Document.COLUMN_SIZE, 0L)
+                add(DocumentsContract.Document.COLUMN_LAST_MODIFIED, 0L)
+                add(DocumentsContract.Document.COLUMN_FLAGS, 0)
             }
             return result
         }
@@ -319,7 +308,7 @@ class ImageProvider : DocumentsProvider() {
         val parent = requireInsideMount(File(parentDocumentId))
         disallowSymlinks(parent)
         val safeName = sanitiseDisplayName(displayName)
-        val child = if (mimeType == Document.MIME_TYPE_DIR) {
+        val child = if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
             File(parent, safeName).also { it.mkdirs() }
         } else {
             File(parent, safeName).also { it.createNewFile() }
@@ -384,27 +373,27 @@ class ImageProvider : DocumentsProvider() {
 
     private fun addFileRow(cursor: MatrixCursor, file: File, docId: String) {
         val mimeType = if (file.isDirectory) {
-            Document.MIME_TYPE_DIR
+            DocumentsContract.Document.MIME_TYPE_DIR
         } else {
             MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
                 ?: "application/octet-stream"
         }
         val flags = if (file.canWrite()) {
-            Document.FLAG_SUPPORTS_DELETE or Document.FLAG_SUPPORTS_RENAME or if (file.isDirectory) {
-                Document.FLAG_DIR_SUPPORTS_CREATE
+            DocumentsContract.Document.FLAG_SUPPORTS_DELETE or DocumentsContract.Document.FLAG_SUPPORTS_RENAME or if (file.isDirectory) {
+                DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE
             } else {
-                Document.FLAG_SUPPORTS_WRITE
+                DocumentsContract.Document.FLAG_SUPPORTS_WRITE
             }
         } else {
             0
         }
         cursor.newRow().apply {
-            add(Document.COLUMN_DOCUMENT_ID, docId)
-            add(Document.COLUMN_DISPLAY_NAME, file.name)
-            add(Document.COLUMN_MIME_TYPE, mimeType)
-            add(Document.COLUMN_SIZE, file.length())
-            add(Document.COLUMN_LAST_MODIFIED, file.lastModified())
-            add(Document.COLUMN_FLAGS, flags)
+            add(DocumentsContract.Document.COLUMN_DOCUMENT_ID, docId)
+            add(DocumentsContract.Document.COLUMN_DISPLAY_NAME, file.name)
+            add(DocumentsContract.Document.COLUMN_MIME_TYPE, mimeType)
+            add(DocumentsContract.Document.COLUMN_SIZE, file.length())
+            add(DocumentsContract.Document.COLUMN_LAST_MODIFIED, file.lastModified())
+            add(DocumentsContract.Document.COLUMN_FLAGS, flags)
         }
     }
 }

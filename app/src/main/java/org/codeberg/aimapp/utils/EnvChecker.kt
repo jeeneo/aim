@@ -1,26 +1,14 @@
-/**
- * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 package org.codeberg.aimapp.utils
 
 import android.content.Context
 import android.util.Log
-import org.codeberg.aimapp.EnvironmentStatus
 import org.codeberg.aimapp.R
+import org.codeberg.aimapp.utils.mounts.EnvironmentStatus
+import org.codeberg.aimapp.utils.shell.RootShell
+import org.codeberg.aimapp.utils.shell.ShellArg
+import org.codeberg.aimapp.utils.shell.pathArg
 
 private val BUSYBOX_CANDIDATES = listOf(
     "busybox", "/system/bin/busybox", "/system/xbin/busybox",
@@ -53,10 +41,12 @@ fun checkEnv(ctx: Context): Pair<EnvironmentStatus, String> {
     ) to ""
     val busyboxPath = resolveBusyboxPath()
     if (busyboxPath != null) {
-        val bbVersion = RootShell.cmd(busyboxPath, ShellArg.literal("--version")).output.lineSequence().firstOrNull()?.trim()
-        Log.d("EnvChecker", "BusyBox version: $bbVersion")
+        val bbVersion =
+            RootShell.cmd(busyboxPath).output.lineSequence()
+                .firstOrNull()?.trim()
+        Log.d("EnvChecker", "BusyBox: $bbVersion")
         val androidVersion = android.os.Build.VERSION.RELEASE
-        Log.d("EnvChecker", "Android version: $androidVersion")
+        Log.d("EnvChecker", "Android: $androidVersion")
         return EnvironmentStatus(
             rootAvailable = true,
             rootMessage = ctx.getString(R.string.env_root_granted),

@@ -1,28 +1,19 @@
-/**
- * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: GPL-3.0-or-later
 
-package org.codeberg.aimapp.utils
+package org.codeberg.aimapp.utils.mounts
 
 import android.content.Context
 import android.util.Log
-import org.codeberg.aimapp.FsType
-import org.codeberg.aimapp.MountMode
-import org.codeberg.aimapp.OpResult
 import org.codeberg.aimapp.R
+import org.codeberg.aimapp.utils.shell.RootShell
+import org.codeberg.aimapp.utils.shell.ShellArg
+import org.codeberg.aimapp.utils.shell.ShellCmd
+import org.codeberg.aimapp.utils.shell.enumArg
+import org.codeberg.aimapp.utils.shell.loopDevArg
+import org.codeberg.aimapp.utils.shell.mountOptsArg
+import org.codeberg.aimapp.utils.shell.numArg
+import org.codeberg.aimapp.utils.shell.pathArg
+import org.codeberg.aimapp.utils.shell.secontextArg
 
 private const val TAG = "MountOps"
 
@@ -110,7 +101,10 @@ fun doMount(
         Log.d(TAG, "direct mount failed: $directMountError")
     }
 
-    Log.d(TAG, if (isPartition) "using losetup with offset" else "direct failed, falling to losetup")
+    Log.d(
+        TAG,
+        if (isPartition) "using losetup with offset" else "direct failed, falling to losetup"
+    )
     var attachedLoop: String? = null
     var mountSucceeded = false
     try {

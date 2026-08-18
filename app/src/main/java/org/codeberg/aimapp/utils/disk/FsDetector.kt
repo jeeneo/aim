@@ -1,25 +1,16 @@
-/**
- * Copyright (C) 2026 dryerlint <codeberg.org/dryerlint>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: GPL-3.0-or-later
 
-package org.codeberg.aimapp.utils
+package org.codeberg.aimapp.utils.disk
 
 import android.content.Context
 import android.util.Log
-import org.codeberg.aimapp.FsType
+import org.codeberg.aimapp.utils.mounts.FsType
+import org.codeberg.aimapp.utils.mounts.PartitionTableInfo
+import org.codeberg.aimapp.utils.mounts.probePartitionTable
+import org.codeberg.aimapp.utils.shell.RootShell
+import org.codeberg.aimapp.utils.shell.ShellArg
+import org.codeberg.aimapp.utils.shell.ShellCmd
+import org.codeberg.aimapp.utils.shell.pathArg
 import java.io.File
 
 private const val TAG = "FsDetector"
@@ -37,7 +28,7 @@ val FS_LIST = mapOf(
     "ext4" to FsType.EXT4,
     "vfat" to FsType.VFAT,
     "exfat" to FsType.EXFAT,
-    "iso9660" to FsType.ISO9660, // not really supported on most devices
+    "iso9660" to FsType.ISO9660, // rare
 )
 
 fun hexProbe(
