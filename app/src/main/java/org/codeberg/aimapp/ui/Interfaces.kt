@@ -78,7 +78,7 @@ fun GroupedRow(
     )
     val shape = cardShape(position, inner = animatedOuter)
     val background = if (selected) {
-        MaterialTheme.colorScheme.surfaceContainerHighest
+        MaterialTheme.colorScheme.inverseOnSurface
     } else {
         MaterialTheme.colorScheme.surfaceContainerHigh
     }
