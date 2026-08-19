@@ -20,15 +20,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
@@ -60,6 +66,7 @@ import org.codeberg.aimapp.ui.HapticPatterns
 import org.codeberg.aimapp.ui.ImageOptionsDialog
 import org.codeberg.aimapp.ui.PartitionPickerDialog
 import org.codeberg.aimapp.ui.ScreenScaffold
+import org.codeberg.aimapp.ui.SectionHeader
 import org.codeberg.aimapp.ui.positionFor
 import org.codeberg.aimapp.ui.screenContentPadding
 import org.codeberg.aimapp.ui.theme.AimTheme
@@ -200,10 +207,13 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
             if (isBusy) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(GroupedListSpacing),
+            ) {
                 if (showEnv) {
                     item(key = "cat_env") {
-                        Header(text = stringResource(R.string.pref_header_environment))
+                        SectionHeader(text = stringResource(R.string.pref_header_environment))
                         GroupedRow(
                             position = positionFor(1, 2)
                         ) {
@@ -235,9 +245,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                 }
                 val totalRows = images.size + 1
                 item(key = "cat_images") {
-                    Header(
-                        text = stringResource(R.string.pref_header_images)
-                    )
+                    SectionHeader(text = stringResource(R.string.pref_header_images))
                     GroupedRow(
                         position = positionFor(
                             1, totalRows
@@ -255,11 +263,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                 }
                 itemsIndexed(
                     items = images, key = { _, img -> "img_${img.path}" }) { index, img ->
-                    Spacer(
-                        modifier = Modifier.height(
-                            GroupedListSpacing
-                        )
-                    )
+//                    Spacer(modifier = Modifier.height(GroupedListSpacing))
                     GroupedRow(
                         position = positionFor(
                             index + 2, totalRows
@@ -274,17 +278,24 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                         )
                         VerticalDivider(
                             modifier = Modifier
-                                .height(42.dp)
+                                .height(38.dp)
                                 .padding(horizontal = 12.dp)
                                 .clip(RoundedCornerShape(50)),
-                            thickness = 4.dp,
+                            thickness = 3.dp,
                             color = MaterialTheme.colorScheme.outlineVariant,
                         )
                         Switch(
                             checked = img.enabled,
                             enabled = !isBusy && envStatus.ready,
+                            thumbContent = {
+                                Icon(
+                                    imageVector = if (img.enabled) Icons.Filled.Check else Icons.Filled.Close,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize),
+                                )
+                            },
                             onCheckedChange = { enabled ->
-                                HapticPatterns.tap();
+                                HapticPatterns.tap()
                                 viewModel.toggleImage(img.path, enabled)
                             },
                             modifier = Modifier.padding(end = 2.dp),
@@ -293,9 +304,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                 }
                 val mountedImages = images.filter { it.isMounted }
                 item(key = "cat_active_mounts") {
-                    Header(
-                        text = stringResource(R.string.pref_header_active_mounts)
-                    )
+                    SectionHeader(text = stringResource(R.string.pref_header_active_mounts))
                 }
                 if (mountedImages.isEmpty()) {
                     item(key = "no_active_mounts") {
@@ -304,7 +313,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                             enabled = false,
                         ) {
                             GroupedTextContent(
-                                title = stringResource(R.string.pref_no_mounts_name), summary = null
+                                title = stringResource(R.string.main_no_mounts), summary = null
                             )
                         }
                     }
@@ -313,11 +322,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                         mountedImages.size, key = { index -> mountedImages[index].path }) { index ->
                         val img = mountedImages[index]
                         val totalCount = mountedImages.size + 1
-                        Spacer(
-                            modifier = Modifier.height(
-                                GroupedListSpacing
-                            )
-                        )
+//                        Spacer(modifier = Modifier.height(GroupedListSpacing))
                         GroupedRow(
                             position = positionFor(
                                 index + 1, totalCount
@@ -350,24 +355,27 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                     }
                 }
                 item(key = "apply_settings") {
-                    Spacer(
-                        modifier = Modifier.height(
-                            GroupedListSpacing
-                        )
-                    )
+//                    Spacer(modifier = Modifier.height(GroupedListSpacing))
                     GroupedRow(
                         position = positionFor(2, 2),
                         enabled = !isBusy && envStatus.ready && images.isNotEmpty(),
                         onClick = { viewModel.applySettings() }) {
-                        Text(
-                            text = stringResource(R.string.main_apply_mounts),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
+                        Column {
+                            Text(
+                                text = stringResource(R.string.main_apply_mounts),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = stringResource(R.string.pref_apply_settings_desc),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
                 item(key = "cat_settings") {
-                    Header(text = stringResource(R.string.pref_header_settings))
+                    SectionHeader(text = stringResource(R.string.pref_header_settings))
                     GroupedRow(
                         position = CardPosition.Solo,
                         onClick = if (!isBusy) ({ showBindDirEdit = true }) else null,
@@ -382,14 +390,14 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                     }
                 }
                 item(key = "cat_about") {
-                    Header(text = stringResource(R.string.pref_header_about))
+                    SectionHeader(text = stringResource(R.string.pref_header_about))
                     val uriHandler = LocalUriHandler.current
                     GroupedRow(
                         position = CardPosition.Solo,
                         onClick = { uriHandler.openUri("https://github.com/jeeneo/aim") },
                     ) {
                         GroupedTextContent(
-                            title = stringResource(R.string.pref_version_name),
+                            title = stringResource(R.string.main_version_name),
                             summary = versionName,
                         )
                     }
@@ -399,16 +407,16 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     }
 }
 
-@Composable
-private fun Header(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
-    )
-}
+//@Composable
+//private fun Header(text: String) {
+//    Text(
+//        text = text,
+//        style = MaterialTheme.typography.labelLarge,
+//        color = MaterialTheme.colorScheme.primary,
+//        fontWeight = FontWeight.SemiBold,
+//        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
+//    )
+//}
 
 @Composable
 private fun GroupedTextContent(

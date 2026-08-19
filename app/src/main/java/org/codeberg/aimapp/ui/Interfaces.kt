@@ -1,9 +1,14 @@
 package org.codeberg.aimapp.ui
+
 // SPDX-License-Identifier: GPL-3.0-or-later
-import android.annotation.SuppressLint
+
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,9 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -26,7 +31,7 @@ import androidx.compose.ui.unit.dp
 
 enum class CardPosition { Leading, Center, Trailing, Solo }
 
-val GroupedListSpacing: Dp = 4.dp
+val GroupedListSpacing: Dp = 2.dp
 val ScreenHorizontalPadding: Dp = 16.dp
 
 fun cardShape(
@@ -36,32 +41,9 @@ fun cardShape(
         topStart = outer, topEnd = outer, bottomStart = inner, bottomEnd = inner
     )
 
-    CardPosition.Center -> RoundedCornerShape(6.dp)
-    CardPosition.Trailing -> RoundedCornerShape(
-        topStart = inner, topEnd = inner, bottomStart = outer, bottomEnd = outer
-    )
-
-    CardPosition.Solo -> RoundedCornerShape(outer)
-}
-
-fun buttonShape(
-    position: CardPosition,
-    outer: Dp = 16.dp,
-    inner: Dp = 6.dp,
-): RoundedCornerShape = when (position) {
-    CardPosition.Leading -> RoundedCornerShape(
-        topStart = inner,
-        topEnd = inner,
-        bottomStart = outer,
-        bottomEnd = outer,
-    )
-
     CardPosition.Center -> RoundedCornerShape(inner)
     CardPosition.Trailing -> RoundedCornerShape(
-        topStart = inner,
-        topEnd = inner,
-        bottomStart = outer,
-        bottomEnd = outer,
+        topStart = inner, topEnd = inner, bottomStart = outer, bottomEnd = outer
     )
 
     CardPosition.Solo -> RoundedCornerShape(outer)
@@ -74,7 +56,6 @@ fun positionFor(index: Int, count: Int): CardPosition = when {
     else -> CardPosition.Center
 }
 
-@SuppressLint("MissingHapticFeedback")
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GroupedRow(
@@ -89,13 +70,18 @@ fun GroupedRow(
     horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
     content: @Composable RowScope.() -> Unit,
 ) {
-    val shape = cardShape(position)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val animatedOuter by animateDpAsState(
+        targetValue = if (isPressed) 16.dp else 6.dp,
+        label = "groupedRowOuterCorner",
+    )
+    val shape = cardShape(position, inner = animatedOuter)
     val background = if (selected) {
         MaterialTheme.colorScheme.surfaceContainerHighest
     } else {
         MaterialTheme.colorScheme.surfaceContainerHigh
     }
-
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -104,11 +90,12 @@ fun GroupedRow(
             .background(background, shape)
             .then(
                 when {
-                    (onClick != null || onLongClick != null) && enabled ->
-                        Modifier.combinedClickable(
-                            onClick = { HapticPatterns.tap(); onClick?.invoke() },
-                            onLongClick = onLongClick,
-                        )
+                    (onClick != null || onLongClick != null) && enabled -> Modifier.combinedClickable(
+                        interactionSource = interactionSource,
+                        indication = LocalIndication.current,
+                        onClick = { HapticPatterns.tap(); onClick?.invoke() },
+                        onLongClick = onLongClick,
+                    )
 
                     else -> Modifier
                 }

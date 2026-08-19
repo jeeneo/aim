@@ -79,12 +79,7 @@ fun ImageOptionsDialog(
                 Text(
                     text = stringResource(R.string.dialog_format_message, title)
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.dialog_format_fs_label),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Spacer(modifier = Modifier.height(GroupedListSpacing))
+                SectionHeader(stringResource(R.string.dialog_format_fs_label))
                 listOf("ext4", "exFAT").forEachIndexed { index, fsType ->
                     Spacer(modifier = Modifier.height(GroupedListSpacing))
                     GroupedRow(
@@ -108,16 +103,14 @@ fun ImageOptionsDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(GroupedListSpacing),
         ) {
             Text(
                 text = title, style = MaterialTheme.typography.headlineSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(modifier = Modifier.height(GroupedListSpacing))
             SectionHeader(stringResource(R.string.dialog_expose_heading))
-            Spacer(modifier = Modifier.height(GroupedListSpacing))
             GroupedRow(
                 position = positionFor(1, 2),
                 onClick = { onSafChange(!safExposed) },
@@ -154,9 +147,7 @@ fun ImageOptionsDialog(
                 )
                 Spacer(modifier = Modifier.width(12.dp))
             }
-            Spacer(modifier = Modifier.height(GroupedListSpacing))
             SectionHeader(stringResource(R.string.dialog_bind_dir_custom_name))
-            Spacer(modifier = Modifier.height(GroupedListSpacing))
             GroupedRow(
                 position = CardPosition.Solo,
                 onClick = { onBindDirChange() },
@@ -171,7 +162,6 @@ fun ImageOptionsDialog(
             if (bindDir != null) {
                 SectionHeader(stringResource(R.string.dialog_bind_dir_reset_hint))
             }
-            Spacer(modifier = Modifier.height(GroupedListSpacing))
             SectionHeader(stringResource(R.string.dialog_actions_heading))
             val actionCount = (if (showFormat) 1 else 0) + 2
             var actionIndex = 0
@@ -267,16 +257,18 @@ fun BindDirDialog(
 }
 
 @Composable
-private fun SectionHeader(
+fun SectionHeader(
     text: String,
     modifier: Modifier = Modifier,
 ) {
+    Spacer(modifier = Modifier.height(12.dp))
     Text(
         text = text,
         style = MaterialTheme.typography.labelLargeEmphasized,
         color = MaterialTheme.colorScheme.primary,
         modifier = modifier.padding(start = 8.dp),
     )
+    Spacer(modifier = Modifier.height(4.dp))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -302,7 +294,6 @@ fun PartitionPickerDialog(
     initialSelectedIndex: Int? = null,
     origin: PartitionPickerOrigin,
     onDismiss: () -> Unit,
-    /** Row tap: MountFlow selects+closes; UserRequested selects and stays open. */
     onSelect: (PartitionEntry) -> Unit,
 ) {
     val infoOnly = partitions.size == 1
@@ -312,9 +303,6 @@ fun PartitionPickerDialog(
     val isMountFlow = origin == PartitionPickerOrigin.MountFlow
     val sheetState = rememberExpandedSheetState()
     ModalBottomSheet(
-        // MountFlow: the toggle was already flipped on before this sheet appeared, so an
-        // accidental outside-tap dismiss would leave that state dangling — but back press
-        // still works as the one deliberate way out (e.g. an image with nothing mountable).
         onDismissRequest = onDismiss,
         properties = ModalBottomSheetProperties(
             shouldDismissOnBackPress = true,
@@ -398,8 +386,7 @@ fun PartitionPickerDialog(
                                 Text(
                                     text = formatSize(part.sizeBytes),
                                     style = MaterialTheme.typography.bodySmall,
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
+                                )/*Spacer(modifier = Modifier.width(12.dp))*/
                                 val fsLabel = part.detectedFs?.mountType
                                     ?: stringResource(R.string.dialog_partition_unsupported)
                                 Text(

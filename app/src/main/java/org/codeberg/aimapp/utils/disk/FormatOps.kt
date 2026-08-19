@@ -99,7 +99,7 @@ fun formatImage(
             )
         )
     }
-    return if (r.exitCode == 0) OpResult.success(ctx.getString(R.string.format_success, fsType))
+    return if (r.exitCode == 0) OpResult.success(ctx.getString(R.string.alert_format_success, fsType))
     else OpResult.failure(Exception(ctx.getString(R.string.error_format_failed_output, r.output)))
 }
 

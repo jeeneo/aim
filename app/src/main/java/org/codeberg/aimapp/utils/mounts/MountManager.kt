@@ -279,7 +279,7 @@ class MountManager(
 
                 is DetectFsResult.AccessError -> {
                     Log.w(TAG, "fs access error for $imagePath: ${detect.reason}")
-                    return fail(R.string.error_ksu_or_alike_permission)
+                    return fail(R.string.error_failed_to_access_image, detect.reason)
                 }
             }
         } catch (e: PartitionedImageException) {
