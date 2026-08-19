@@ -12,6 +12,7 @@ import android.system.Os
 import android.system.OsConstants
 import android.util.Log
 import android.webkit.MimeTypeMap
+import org.codeberg.aimapp.BuildConfig
 import org.codeberg.aimapp.R
 import org.codeberg.aimapp.utils.mounts.ImageStore
 import org.codeberg.aimapp.utils.mounts.generateMountStem
@@ -25,7 +26,7 @@ class SAFImageProvider : DocumentsProvider() {
 
     companion object {
         private const val TAG = "ImageProvider"
-        const val AUTHORITY = "org.codeberg.aimapp.documents"
+        const val AUTHORITY = "${BuildConfig.APPLICATION_ID}.documents"
         private const val ROOT_ID = "mounted_images"
         private const val ROOT_DOC_ID = "mounts"
         private const val MAX_DOC_ID_LENGTH = 4096

@@ -386,7 +386,7 @@ fun PartitionPickerDialog(
                                 Text(
                                     text = formatSize(part.sizeBytes),
                                     style = MaterialTheme.typography.bodySmall,
-                                )/*Spacer(modifier = Modifier.width(12.dp))*/
+                                )
                                 val fsLabel = part.detectedFs?.mountType
                                     ?: stringResource(R.string.dialog_partition_unsupported)
                                 Text(

@@ -455,18 +455,24 @@ class MountManager(
             RootShell.cmd("umount", tgtArg, suppressErr = true, ignoreError = true)
         }
         RootShell.cmd("rmdir", tgtArg, suppressErr = true, ignoreError = true)
+        cleanupEmptyBindDir(rbd)
         return BindResult.Removed(target)
+    }
+
+    private fun cleanupEmptyBindDir(bindDir: String) {
+        val rm = RootShell.cmd("rmdir", pathArg(bindDir), suppressErr = true, ignoreError = true)
+        if (rm.exitCode == 0) {
+            Log.d(TAG, "Removed empty bind dir: $bindDir")
+        }
     }
 
     private fun requireEnvReadyBind(): BindResult.Failure? =
         if (!envStatus.value.ready) BindResult.Failure(ctx.getString(R.string.error_env_not_ready)) else null
 
-    /**
-     * detects sparse ext4 images via the ext4 superblock magic (0xEF53) at byte offset 0x438, reads only 2KB
-     */
+    // detects sparse ext4 images via the ext4 superblock magic (0xEF53) at byte offset 0x438, reads only 2KB
     private fun isSparseImage(imagePath: String): Boolean {
-        // Detect Android sparse image magic 0xED26FF3A (hexdump prints little-endian bytes as "3a ff 26 ed").
-        // Read only the first 2KB since the magic is within that range.
+        // detect Android sparse image magic 0xED26FF3A (hexdump prints little-endian bytes as "3a ff 26 ed").
+        // read only the first 2KB since the magic should be within that
         return RootShell.cmd(
             "hexdump",
             ShellArg.literal("-C"),
@@ -478,10 +484,8 @@ class MountManager(
         ).let { it.exitCode == 0 && it.output.isNotBlank() }
     }
 
-    /**
-     * canonicalizes and double-checks [bindDir] against [org.codeberg.aimapp.utils.paths.validateBindDir] to detect symlink
-     * races between the two resolutions. Returns null if the path is rejected at any stage.
-     */
+    // canonicalizes and double-checks [bindDir] against [org.codeberg.aimapp.utils.paths.validateBindDir] to detect symlink
+    // races between the two resolutions. Returns null if the path is rejected at any stage.
     private fun resolveAndValidateBindDir(bindDir: String): String? {
         if (validateBindDir(ctx, bindDir) != null) {
             Log.w(TAG, "bindDir rejected before canonicalization: $bindDir")

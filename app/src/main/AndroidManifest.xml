@@ -23,7 +23,7 @@
         </activity>
         <provider
             android:name=".utils.SAFImageProvider"
-            android:authorities="org.codeberg.aimapp.documents"
+            android:authorities="${applicationId}.documents"
             android:exported="true"
             android:grantUriPermissions="true"
             android:permission="android.permission.MANAGE_DOCUMENTS">
