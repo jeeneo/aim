@@ -2,13 +2,11 @@
 
 <img src="assets/aim_logo.svg" alt="get it? aim? it's a pun of a bullseye cause yk it looks like a target but also a disc image uhm heh sorry" width="72">
 
-<br>
-
 AIM is an Android app for mounting `.img` files on your phone. Supports `ext4`, `exfat` and `fat32` filesystems.
 
 It is installed as a normal app and root access is required.
 
-<img src="assets/screenshots/dark.png" alt="dark screenshot" width="200" />
+<img src="assets/screenshots/dark.webp" alt="dark screenshot" width="200" />
 
 ## Features
 
@@ -19,11 +17,11 @@ It is installed as a normal app and root access is required.
 * Multi partition support
 * Mounting on internal storage and in documents provider
 
-Meant to be the phone equivalent of [MSD](https://github.com/chenxiaolong/MSD)
+Can be paired with [MSD](https://github.com/chenxiaolong/MSD)
 
 ## Limitations
 
-* Must have root access and busybox installed
+* Must have root access and busybox
 * Sparse (dynamic) images are not supported
 * Only local files are supported
   - Must be on internal storage or sd card.
@@ -32,21 +30,13 @@ Meant to be the phone equivalent of [MSD](https://github.com/chenxiaolong/MSD)
 * Only tested on AOSP based ROMs
 
 > [!CAUTION]
-> This application runs as root and processes arbitrary user input to shell commands. This introduces security risks and while protective measures have been implemented to mitigate potential issues, no guarantees can be made. Use at your own risk.
+> This application runs shell commands as root (`busybox`, `mount`, etc) and processes arbitrary user input. This introduces security risks. While protective measures have been implemented to prevent potential issues, no guarantees can be made. Use at your own risk.
 
-Note: if you use KernelSU or similar root solutions and you encounter issues, please set AIM to the following custom profile:
-
-`Mount namespace: global`
-
-`uid = 0, gid = 0`
-
-`Groups: system, root, app`
-
-`Capabilities: CHOWN, DAC_OVERRIDE, FOWNER, SYS_ADMIN`
+Note: if you use KernelSU or similar root solutions and you encounter issues, please set AIM to use the global mount namespace.
 
 ## Usage
 
-1. Download latest version from the [releases page](https://codeberg.org/dryerlint/AIM/releases).
+1. Download latest version from the [releases page](https://github.com/jeeneo/aim/releases).
 
 2. Grant root permissions
 
@@ -61,11 +51,7 @@ AIM does not need to run in the background. Once configured, the mounted images 
 > [!IMPORTANT]
 > Before uninstalling the app, check and unmount all images to prevent unexpected issues or data loss
 
-## Permissions
-
-AIM does not use any permissions except that of running commands as root. Which is dangerous and can introduce security holes that I am not aware of. I have tried my best at preventing such cases and parse carefully but cannot guarantee it is 100% foolproof.
-
-## Other info
+## Info
 
 ISO file types are supported, but the filesystem `ISO9660` is hardly supported on modern kernels, and only will succeed if the ISO is formatted as any of the supported filesystems. The app will however, attempt to mount and will fail if your device does not support it.
 
