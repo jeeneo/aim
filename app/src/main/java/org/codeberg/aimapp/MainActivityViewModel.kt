@@ -19,8 +19,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.codeberg.aimapp.utils.SAFImageProvider
+import org.codeberg.aimapp.utils.checkEnvironment as runEnvCheck
+import org.codeberg.aimapp.utils.envStatus as envStatusFlow
 import org.codeberg.aimapp.utils.disk.DetectFsResult
 import org.codeberg.aimapp.utils.disk.detectFilesystem
+import org.codeberg.aimapp.utils.disk.formatImage as formatDiskImage
 import org.codeberg.aimapp.utils.mounts.BindResult
 import org.codeberg.aimapp.utils.mounts.EnvironmentStatus
 import org.codeberg.aimapp.utils.mounts.ImageStore
@@ -100,12 +103,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private val app: Application = application
-    val mountManager = MountManager(
-        application, object : MountManager.RootsChangedNotifier {
-            override fun notify(context: Context) {
-                SAFImageProvider.notifyRootsChanged(context)
-            }
-        })
+    val mountManager = MountManager(application) { SAFImageProvider.notifyRootsChanged(it) }
     private val mountedPartitionIndex = mutableMapOf<String, Int>()
     private val mountedStem = mutableMapOf<String, String>()
 
@@ -121,7 +119,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     val envChecked: StateFlow<Boolean> = _envChecked
     private val _images = MutableStateFlow<List<ImageInfo>>(emptyList())
     val images: StateFlow<List<ImageInfo>> = _images
-    val envStatus: StateFlow<EnvironmentStatus> = mountManager.envStatus
+    val envStatus: StateFlow<EnvironmentStatus> = envStatusFlow
     private val _partitionPicker = MutableStateFlow<PartitionState?>(null)
     val partitionPicker: StateFlow<PartitionState?> = _partitionPicker
     private val pendingPartitions = ArrayDeque<PartitionState>()
@@ -322,7 +320,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         viewModelScope.launch {
             withLockedUI {
                 try {
-                    withContext(Dispatchers.IO) { mountManager.checkEnvironment() }
+                    withContext(Dispatchers.IO) { runEnvCheck() }
                     _envChecked.value = true
                 } catch (e: Exception) {
                     Log.e(TAG, "Environment check failed", e)
@@ -703,7 +701,11 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     alert(Alert.Failure(app.getString(R.string.alert_path_validation_failed)))
                     return@withLockedUI
                 }
-                val result = withContext(Dispatchers.IO) { mountManager.formatImage(path, fsType) }
+                val result = withContext(Dispatchers.IO) {
+                    formatDiskImage(
+                        app, path, envStatus.value.ready, envStatus.value.busyboxPath, fsType
+                    )
+                }
                 result.onSuccess { msg ->
                     alert(Alert.Success(msg))
                     // clear partition flags since formatting removes the partition table

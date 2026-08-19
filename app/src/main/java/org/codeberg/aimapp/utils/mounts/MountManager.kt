@@ -10,12 +10,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.codeberg.aimapp.R
-import org.codeberg.aimapp.utils.checkEnv
 import org.codeberg.aimapp.utils.disk.DetectFsResult
 import org.codeberg.aimapp.utils.disk.FS_LIST
 import org.codeberg.aimapp.utils.disk.PartitionedImageException
 import org.codeberg.aimapp.utils.disk.detectFilesystem
-import org.codeberg.aimapp.utils.disk.formatImage
+import org.codeberg.aimapp.utils.envStatus
 import org.codeberg.aimapp.utils.paths.filenameToMountStem
 import org.codeberg.aimapp.utils.paths.isValidLabelStem
 import org.codeberg.aimapp.utils.paths.sanitizeStem
@@ -103,29 +102,16 @@ fun generateMountStem(
 
 class MountManager(
     appContext: Context,
-    private val rootsChangedNotifier: RootsChangedNotifier,
+    private val onRootsChanged: (Context) -> Unit,
 ) {
-    interface RootsChangedNotifier {
-        fun notify(context: Context)
-    }
-
     private val ctx = appContext.applicationContext
     val mountsDir: String = File(ctx.filesDir, "mounts").apply { mkdirs() }.absolutePath
-
     private val mountMutex = Mutex()
     private val maxMounts = 10
-    private var busyboxBin = ""
-
     private val _mountedImages = MutableStateFlow<List<MountedImage>>(emptyList())
     val mountedImages: StateFlow<List<MountedImage>> = _mountedImages.asStateFlow()
 
-    private val _envStatus = MutableStateFlow(
-        EnvironmentStatus(
-            rootMessage = ctx.getString(R.string.env_not_checked),
-            busyboxMessage = ctx.getString(R.string.env_not_checked),
-        )
-    )
-    val envStatus: StateFlow<EnvironmentStatus> = _envStatus.asStateFlow()
+    private val busyboxBin: String get() = envStatus.value.busyboxPath
 
     private fun fail(resId: Int, vararg args: Any) =
         MountResult.Failure(ctx.getString(resId, *args))
@@ -134,7 +120,7 @@ class MountManager(
         BindResult.Failure(ctx.getString(resId, *args))
 
     private fun requireEnvReady(): MountResult.Failure? =
-        if (!_envStatus.value.ready) fail(R.string.error_env_not_ready) else null
+        if (!envStatus.value.ready) fail(R.string.error_env_not_ready) else null
 
     private fun requireMountCapacity(): MountResult.Failure? =
         if (_mountedImages.value.size >= maxMounts) fail(
@@ -189,13 +175,6 @@ class MountManager(
                 detachLoop(loop)
             }
         }
-    }
-
-    suspend fun checkEnvironment(): EnvironmentStatus = mountMutex.withLock {
-        val (status, bb) = checkEnv(ctx)
-        busyboxBin = bb
-        _envStatus.value = status
-        return status
     }
 
     private fun readMountedImages(): List<MountedImage> {
@@ -264,9 +243,9 @@ class MountManager(
         if (!imageFile.exists()) return fail(R.string.error_image_not_found, imagePath)
         if (!validatePath(imagePath)) return fail(R.string.error_image_path_invalid_chars)
 
-        // Sparse ext4 images (identified by magic bytes at offset ~0x1000) cannot be
-        // loop-mounted without first being converted to raw. We reject them early rather
-        // than letting the kernel mount fail with a cryptic error.
+        // sparse ext4 images (identified by magic bytes at offset ~0x1000) cannot be
+        // loop-mounted without first being converted to raw, reject them early rather
+        // than letting the kernel mount fail with a cryptic error
         if (!isIso && isSparseImage(imagePath)) return fail(R.string.error_sparse_not_supported)
 
         val fsType = try {
@@ -387,12 +366,9 @@ class MountManager(
 
         RootShell.cmd("rmdir", mpArg, suppressErr = true, ignoreError = true)
         refreshMountedImages()
-        rootsChangedNotifier.notify(ctx)
+        onRootsChanged(ctx)
         return MountResult.Unmounted(item.mountPoint)
     }
-
-    fun formatImage(path: String, fsType: String = "ext4"): OpResult =
-        formatImage(ctx, path, _envStatus.value.ready, busyboxBin, fsType)
 
     suspend fun createStorageBind(
         stem: String,
@@ -483,7 +459,7 @@ class MountManager(
     }
 
     private fun requireEnvReadyBind(): BindResult.Failure? =
-        if (!_envStatus.value.ready) BindResult.Failure(ctx.getString(R.string.error_env_not_ready)) else null
+        if (!envStatus.value.ready) BindResult.Failure(ctx.getString(R.string.error_env_not_ready)) else null
 
     /**
      * detects sparse ext4 images via the ext4 superblock magic (0xEF53) at byte offset 0x438, reads only 2KB
@@ -562,7 +538,7 @@ class MountManager(
                 }
             }
             refreshMountedImages()
-            rootsChangedNotifier.notify(ctx)
+            onRootsChanged(ctx)
             return MountResult.Mounted(mp)
         }
 

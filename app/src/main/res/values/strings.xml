@@ -4,7 +4,7 @@
     <string name="pref_header_images">Images</string>
     <string name="pref_header_active_mounts">Mounts</string>
     <string name="pref_header_about">About</string>
-    <string name="pref_root_busybox_status_name">Root and Busybox</string>
+    <string name="pref_root_busybox_status_name">Root and busybox</string>
     <string name="pref_retry_checks_name">Retry environment checks</string>
     <string name="pref_retry_checks_desc">Check again</string>
     <string name="pref_add_image_name">Add image</string>
@@ -66,7 +66,7 @@
     <string name="image_type_image">Image</string>
     <string name="env_not_checked">Not checked</string>
     <string name="env_root_denied">Root access denied</string>
-    <string name="env_busybox_skipped">Skipped (no root)</string>
+    <string name="env_busybox_skipped">Busybox: skipped (no root)</string>
     <string name="env_root_granted">Root access granted</string>
     <string name="env_busybox_system_found">System busybox found</string>
     <string name="env_busybox_not_found">No busybox found</string>

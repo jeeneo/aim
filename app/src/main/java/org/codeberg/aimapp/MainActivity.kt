@@ -212,7 +212,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                 verticalArrangement = Arrangement.spacedBy(GroupedListSpacing),
             ) {
                 if (showEnv) {
-                    item(key = "cat_env") {
+                    item(key = "cat_env_header") {
                         SectionHeader(text = stringResource(R.string.pref_header_environment))
                         GroupedRow(
                             position = positionFor(1, 2)
@@ -232,6 +232,8 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                                 },
                             )
                         }
+                    }
+                    item(key = "cat_env_body") {
                         GroupedRow(
                             position = positionFor(2, 2),
                             onClick = if (!isBusy) ({ viewModel.checkEnvironment() }) else null,
@@ -263,7 +265,6 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                 }
                 itemsIndexed(
                     items = images, key = { _, img -> "img_${img.path}" }) { index, img ->
-//                    Spacer(modifier = Modifier.height(GroupedListSpacing))
                     GroupedRow(
                         position = positionFor(
                             index + 2, totalRows
@@ -322,7 +323,6 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                         mountedImages.size, key = { index -> mountedImages[index].path }) { index ->
                         val img = mountedImages[index]
                         val totalCount = mountedImages.size + 1
-//                        Spacer(modifier = Modifier.height(GroupedListSpacing))
                         GroupedRow(
                             position = positionFor(
                                 index + 1, totalCount
@@ -355,7 +355,6 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                     }
                 }
                 item(key = "apply_settings") {
-//                    Spacer(modifier = Modifier.height(GroupedListSpacing))
                     GroupedRow(
                         position = positionFor(2, 2),
                         enabled = !isBusy && envStatus.ready && images.isNotEmpty(),
@@ -407,17 +406,6 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     }
 }
 
-//@Composable
-//private fun Header(text: String) {
-//    Text(
-//        text = text,
-//        style = MaterialTheme.typography.labelLarge,
-//        color = MaterialTheme.colorScheme.primary,
-//        fontWeight = FontWeight.SemiBold,
-//        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
-//    )
-//}
-
 @Composable
 private fun GroupedTextContent(
     modifier: Modifier = Modifier,
@@ -442,7 +430,7 @@ private fun GroupedTextContent(
                 text = summary,
                 style = MaterialTheme.typography.bodyMedium,
                 color = summaryColor,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
