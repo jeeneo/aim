@@ -173,7 +173,10 @@ class SAFImageProvider : DocumentsProvider() {
             )
             add(DocumentsContract.Root.COLUMN_ICON, R.drawable.aim_logo)
             add(DocumentsContract.Root.COLUMN_TITLE, ctx.getString(R.string.app_name))
-            add(DocumentsContract.Root.COLUMN_SUMMARY, ctx.getString(R.string.main_mounted_images_title))
+            add(
+                DocumentsContract.Root.COLUMN_SUMMARY,
+                ctx.getString(R.string.main_mounted_images_title)
+            )
             add(DocumentsContract.Root.COLUMN_DOCUMENT_ID, ROOT_DOC_ID)
         }
         result.setNotificationUri(

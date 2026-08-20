@@ -118,11 +118,11 @@ object RootShell {
         orChain: ShellCmd? = null,
         redirectErr: Boolean = false,
         ignoreError: Boolean = false,
-        suppressErr: Boolean = false,
+        outputTo: String? = null,
     ): ShellResult {
         val cmdLine = buildString {
             append(command.fragment)
-            if (suppressErr) append(" 2>/dev/null")
+            if (ignoreError) append(" 2>/dev/null")
             if (redirectErr) append(" 2>&1")
             if (pipeInto != null) {
                 append(" | "); append(pipeInto.fragment)
@@ -132,6 +132,9 @@ object RootShell {
             }
             if (orChain != null) {
                 append(" || "); append(orChain.fragment)
+            }
+            if (outputTo != null) {
+                append(" > "); append(outputTo)
             }
             if (ignoreError) append(" || true")
         }
@@ -147,7 +150,7 @@ object RootShell {
         orChain: ShellCmd? = null,
         redirectErr: Boolean = false,
         ignoreError: Boolean = false,
-        suppressErr: Boolean = false,
+        outputTo: String? = null,
     ): ShellResult {
         val command = try {
             ShellCmd.of(binary, *args, busyboxBin = busyboxBin)
@@ -155,7 +158,15 @@ object RootShell {
             Log.e(TAG, "Blocked execution of non-whitelisted binary: $binary")
             return ShellResult(-1, "Binary not allowed: $binary")
         }
-        return cmd(command, pipeInto, chain, orChain, redirectErr, ignoreError, suppressErr)
+        return cmd(
+            command,
+            pipeInto,
+            chain,
+            orChain,
+            redirectErr,
+            ignoreError,
+            outputTo
+        )
     }
 
     private fun startSuperuser(cmdLine: String): Process {

@@ -77,6 +77,8 @@ fun ImageOptionsDialog(
     bindDir: String? = null,
     onBindDirChange: () -> Unit = {},
     onBindDirReset: () -> Unit = {},
+    preservePermissions: Boolean = false,
+    onPreservePermissionsChange: (Boolean) -> Unit = {},
 ) {
     var confirmFormat by remember { mutableStateOf(false) }
     val sheetState = rememberExpandedSheetState()
@@ -188,6 +190,32 @@ fun ImageOptionsDialog(
             }
             if (bindDir != null) {
                 SectionHeader(stringResource(R.string.dialog_bind_dir_reset_hint))
+            }
+            SectionHeader(stringResource(R.string.dialog_permissions_heading))
+            GroupedRow(
+                position = CardPosition.Solo,
+                onClick = { onPreservePermissionsChange(!preservePermissions) },
+            ) {
+                Text(
+                    text = stringResource(R.string.pref_preserve_permissions_name),
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = preservePermissions,
+                    thumbContent = {
+                        Icon(
+                            imageVector = if (preservePermissions) Icons.Filled.Check else Icons.Filled.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(SwitchDefaults.IconSize),
+                        )
+                    },
+                    onCheckedChange = { HapticPatterns.tap(); onPreservePermissionsChange(!preservePermissions) },
+                    modifier = Modifier
+                        .height(21.dp)
+                        .aspectRatio(2f)
+                        .wrapContentSize(Alignment.Center)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
             }
             SectionHeader(stringResource(R.string.dialog_actions_heading))
             val actionCount = (if (showFormat) 1 else 0) + 2

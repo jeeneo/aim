@@ -4,7 +4,6 @@ import android.os.Build
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
-import androidx.annotation.RequiresApi
 import org.codeberg.aimapp.AimApplication
 
 object HapticPatterns {

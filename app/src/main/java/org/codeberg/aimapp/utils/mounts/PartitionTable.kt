@@ -75,14 +75,15 @@ data class PartitionEntry(
 
 enum class PartitionScheme { MBR, GPT }
 
-fun fsDisplayName(ctx: Context, fs: FsType?, probe: ((Int, Int) -> String)? = null): String = when (fs) {
-    FsType.EXT4 -> "ext4"
-    FsType.VFAT -> (probe?.let { detectFatVariant(it) }) ?: "FAT"
-    FsType.EXFAT -> "exFAT"
-    FsType.ISO9660 -> "ISO9660"
-    is FsType.OTHER -> fs.name
-    null -> ctx.getString(R.string.image_type_image)
-}
+fun fsDisplayName(ctx: Context, fs: FsType?, probe: ((Int, Int) -> String)? = null): String =
+    when (fs) {
+        FsType.EXT4 -> "ext4"
+        FsType.VFAT -> (probe?.let { detectFatVariant(it) }) ?: "FAT"
+        FsType.EXFAT -> "exFAT"
+        FsType.ISO9660 -> "ISO9660"
+        is FsType.OTHER -> fs.name
+        null -> ctx.getString(R.string.image_type_image)
+    }
 
 data class PartitionTableInfo(
     val partitions: List<PartitionEntry>,
@@ -181,7 +182,7 @@ private fun queryImageSize(busyboxBin: String, imgArg: ShellArg): Long {
         ShellArg.literal("%s"),
         imgArg,
         busyboxBin = busyboxBin,
-        suppressErr = true,
+        ignoreError = true,
         orChain = ShellCmd.of(
             "wc", ShellArg.literal("-c"), busyboxBin = busyboxBin, stdinFrom = imgArg
         )

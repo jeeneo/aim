@@ -143,7 +143,6 @@ class MountManager(
             ShellArg.literal("-d"),
             loopDevArg(loopDevice),
             busyboxBin = busyboxBin,
-            suppressErr = true,
             ignoreError = true
         )
     }
@@ -153,7 +152,7 @@ class MountManager(
             "losetup",
             ShellArg.literal("-a"),
             busyboxBin = busyboxBin,
-            suppressErr = true,
+            ignoreError = true,
             pipeInto = ShellCmd.of("grep", ShellArg.literal("-F"), pathArg(imagePath))
         )
         if (r.exitCode != 0 || r.output.isBlank()) return emptyList()
@@ -203,7 +202,7 @@ class MountManager(
             when {
                 p.size < 3 -> Log.d(TAG, "SKIP (fields=${p.size}): $line").let { null }
 
-                fs == null -> Log.d(TAG, "SKIP (unknown fs '$fsTypeStr'): $line").let { null }
+                fs == null -> Log.d(TAG, "SKIP (unknown fs '${null}'): $line").let { null }
 
                 device == null || "loop" !in device -> Log.d(
                     TAG, "SKIP (not loop, device=$device): $line"
@@ -227,6 +226,7 @@ class MountManager(
         path: String,
         mode: MountMode = MountMode.LOCAL,
         mountDirName: String? = null,
+        preservePermissions: Boolean = false,
     ): MountResult = mountMutex.withLock {
         requireEnvReady()?.let { return it }
         refreshMountedImages()
@@ -296,7 +296,9 @@ class MountManager(
         val stem = sanitizeStem(
             mountDirName ?: filenameToMountStem(imageFile.nameWithoutExtension)
         )
-        return performMount(imagePath, stem, fsType, mode)
+        return performMount(
+            imagePath, stem, fsType, mode, preservePermissions = preservePermissions
+        )
     }
 
     suspend fun mountPartition(
@@ -304,6 +306,7 @@ class MountManager(
         partition: PartitionEntry,
         mode: MountMode = MountMode.LOCAL,
         mountDirName: String? = null,
+        preservePermissions: Boolean = false,
     ): MountResult = mountMutex.withLock {
         requireEnvReady()?.let { return it }
         refreshMountedImages()
@@ -319,7 +322,9 @@ class MountManager(
                 ?: filenameToMountStem(File(imagePath).nameWithoutExtension + "_p${partition.index}")
         )
 
-        return performMount(imagePath, stem, fsType, mode, partition.offsetBytes)
+        return performMount(
+            imagePath, stem, fsType, mode, partition.offsetBytes, preservePermissions
+        )
     }
 
     fun probePartitions(path: String): PartitionedImageResult? {
@@ -329,28 +334,30 @@ class MountManager(
         )
     }
 
-    suspend fun unmountImage(item: MountedImage): MountResult = mountMutex.withLock {
+    suspend fun unmountImage(
+        item: MountedImage,
+        preservePermissions: Boolean = false,
+    ): MountResult = mountMutex.withLock {
         if (!item.mountPoint.startsWith("$mountsDir/")) return fail(R.string.error_invalid_mount_point)
         if (!validatePath(item.mountPoint) || !validatePath(item.loopDevice)) return fail(R.string.error_path_invalid_chars)
-
+        val snapshotFile = "$mountsDir/.${item.mountPoint.removePrefix("$mountsDir/")}.perm"
         val mpArg = pathArg(item.mountPoint)
-
-        if (item.fsType.posixPermissions) {
-            val stem = item.mountPoint.removePrefix("$mountsDir/")
-            val snapshotFile = "$mountsDir/.$stem.perm"
-            restorePermissionsFromSnapshot(item.mountPoint, snapshotFile, item.fsType, busyboxBin).onFailure {
-                Log.w(TAG, "restorePermissionsFromSnapshot failed for ${item.mountPoint}: ${it.message}")
-            }
-        }
-
+        Log.d(TAG, "Unmounting ${item.mountPoint} (loop=${item.loopDevice})")
         RootShell.cmd(
-            "fuser",
-            ShellArg.literal("-km"),
-            mpArg,
-            busyboxBin = busyboxBin,
-            suppressErr = true,
-            ignoreError = true
+            "fuser", ShellArg.literal("-km"), mpArg, busyboxBin = busyboxBin, ignoreError = true
         )
+        if (item.fsType.posixPermissions) {
+            restorePermissions(
+                item.mountPoint, snapshotFile, preservePermissions, busyboxBin
+            ).onFailure {
+                Log.w(
+                    TAG,
+                    "restorePermissionsFromSnapshot failed for ${item.mountPoint}: ${it.message}"
+                )
+            }
+        } else if (!item.fsType.posixPermissions) {
+            Log.w(TAG, "Skipping permission restore for non-POSIX fs ${item.fsType.mountType}")
+        }
 
         val umountOk = RootShell.cmd(
             "umount", mpArg, busyboxBin = busyboxBin
@@ -368,8 +375,8 @@ class MountManager(
             )
         }
 
-        RootShell.cmd("rmdir", mpArg, suppressErr = true, ignoreError = true)
-        File("$mountsDir/.${item.mountPoint.removePrefix("$mountsDir/")}.perm").delete()
+        RootShell.cmd("rmdir", mpArg, ignoreError = true)
+        File(snapshotFile).delete()
         refreshMountedImages()
         onRootsChanged(ctx)
         return MountResult.Unmounted(item.mountPoint)
@@ -407,7 +414,7 @@ class MountManager(
         }
         if (isMountedAt(target)) return BindResult.AlreadyExposed(target)
         if (directMount) {
-            val ls = RootShell.cmd("ls", ShellArg.literal("-A"), tgtArg, suppressErr = true)
+            val ls = RootShell.cmd("ls", ShellArg.literal("-A"), tgtArg, ignoreError = true)
             if (ls.exitCode == 0 && ls.output.isNotBlank()) return bindFail(
                 R.string.dialog_bind_nonempty, target
             )
@@ -436,7 +443,6 @@ class MountManager(
             ShellArg.literal("-R"),
             secontextArg("u:object_r:media_rw_data_file:s0"),
             tgtArg,
-            suppressErr = true,
             ignoreError = true
         )
         return BindResult.Exposed(target)
@@ -457,15 +463,15 @@ class MountManager(
 
         val tgtArg = pathArg(target)
         if (isMountedAt(target)) {
-            RootShell.cmd("umount", tgtArg, suppressErr = true, ignoreError = true)
+            RootShell.cmd("umount", tgtArg, ignoreError = true)
         }
-        RootShell.cmd("rmdir", tgtArg, suppressErr = true, ignoreError = true)
+        RootShell.cmd("rmdir", tgtArg, ignoreError = true)
         cleanupEmptyBindDir(rbd)
         return BindResult.Removed(target)
     }
 
     private fun cleanupEmptyBindDir(bindDir: String) {
-        val rm = RootShell.cmd("rmdir", pathArg(bindDir), suppressErr = true, ignoreError = true)
+        val rm = RootShell.cmd("rmdir", pathArg(bindDir), ignoreError = true)
         if (rm.exitCode == 0) {
             Log.d(TAG, "Removed empty bind dir: $bindDir")
         }
@@ -525,6 +531,7 @@ class MountManager(
         fsType: FsType,
         mode: MountMode,
         partOffset: Long = 0,
+        preservePermissions: Boolean = false,
     ): MountResult {
         val mp = "$mountsDir/$stem"
         if (isMountedAt(mp)) {
@@ -542,9 +549,11 @@ class MountManager(
                 return fail(R.string.error_mount_not_visible)
             }
             if (fsType.posixPermissions) {
-                val snapshotFile = "$mountsDir/.$stem.perm"
-                snapshotPermissions(mp, snapshotFile, busyboxBin).onFailure {
-                    Log.w(TAG, "snapshotPermissions failed for $mp: ${it.message}")
+                if (preservePermissions) {
+                    val snapshotFile = "$mountsDir/.$stem.perm"
+                    snapshotPermissions(mp, snapshotFile, busyboxBin).onFailure {
+                        Log.w(TAG, "snapshotPermissions failed for $mp: ${it.message}")
+                    }
                 }
                 makeAccessible(mp, mountsDir, busyboxBin).onFailure {
                     Log.w(TAG, "makeAccessible failed for $mp: ${it.message}")

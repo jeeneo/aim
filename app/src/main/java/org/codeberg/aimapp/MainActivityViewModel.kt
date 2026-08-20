@@ -51,6 +51,7 @@ data class ImportedImage(
     val hasPartitions: Boolean = false,
     val diskLabel: String? = null,
     val bindDir: String? = null,
+    val preservePermissions: Boolean = false,
 )
 
 data class ImageInfo(
@@ -67,6 +68,7 @@ data class ImageInfo(
     val selectedPartitionIndex: Int? = null,
     val hasPartitions: Boolean = false,
     val bindDir: String? = null,
+    val preservePermissions: Boolean = false,
 )
 
 sealed interface Alert {
@@ -93,6 +95,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         private const val PREFS_SETTINGS = "app_settings"
         private const val KEY_BIND_DIR = "bindmount_dir"
         private const val KEY_SETTINGS_CONFIRMED = "settings_confirmed"
+        private const val KEY_PRESERVE_PERMISSIONS_CONFIRMED = "preserve_permissions_confirmed"
         private const val DEFAULT_BIND_DIR = "/storage/emulated/0/mounts"
     }
 
@@ -120,11 +123,15 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     private val imageStore = ImageStore(application)
     private val settingsPrefs =
         application.getSharedPreferences(PREFS_SETTINGS, Context.MODE_PRIVATE)
-
     private val _bindDir = MutableStateFlow(
         settingsPrefs.getString(KEY_BIND_DIR, DEFAULT_BIND_DIR) ?: DEFAULT_BIND_DIR
     )
     val bindDir: StateFlow<String> = _bindDir
+    private val _showSettingsConfirm = MutableStateFlow(false)
+    val showSettingsConfirm: StateFlow<Boolean> = _showSettingsConfirm
+    private val _showPreservePermissionsConfirm = MutableStateFlow(false)
+    val showPreservePermissionsConfirm: StateFlow<Boolean> = _showPreservePermissionsConfirm
+    private var pendingPreservePermissionsPath: String? = null
 
     private fun errorText(
         throwable: Throwable,
@@ -182,6 +189,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         bindDir: String? = null,
         directMount: Boolean = false,
         imagePath: String? = null,
+        preservePermissions: Boolean = false,
     ): String? {
         val oldBind = imagePath?.let { mountedBindState[it] }
         val effectiveBindDir = oldBind?.bindDir ?: bindDir
@@ -190,7 +198,9 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             mountManager.removeStorageBind(stem, effectiveBindDir, effectiveDirectMount)
         }
         imagePath?.let { mountedBindState.remove(it) }
-        val result = withContext(Dispatchers.IO) { mountManager.unmountImage(mountedImage) }
+        val result = withContext(Dispatchers.IO) {
+            mountManager.unmountImage(mountedImage, preservePermissions)
+        }
         return when (result) {
             is MountResult.Failure -> errorText(
                 Exception(result.message), app.getString(R.string.error_unmount_failed)
@@ -219,11 +229,17 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     ): MountResult {
         val mode = modeFor(imported)
         val storedPart = imported?.selectedPartitionIndex
+        val preservePermissions = imported?.preservePermissions == true
         return withContext(Dispatchers.IO) {
             if (storedPart != null) mountWithStoredPartition(
-                path, storedPart, mode, stem, displayName
+                path, storedPart, mode, stem, displayName, preservePermissions
             )
-            else mountManager.mountImage(path, mode, stem)
+            else mountManager.mountImage(
+                path,
+                mode,
+                stem,
+                preservePermissions = preservePermissions
+            )
         }
     }
 
@@ -270,6 +286,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 selectedPartitionIndex = img.selectedPartitionIndex,
                 hasPartitions = img.hasPartitions,
                 bindDir = img.bindDir,
+                preservePermissions = img.preservePermissions,
             )
         }
     }
@@ -384,7 +401,8 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                         unmountStem,
                         bindDir,
                         directMount = img?.bindDir != null,
-                        imagePath = path
+                        imagePath = path,
+                        preservePermissions = img?.preservePermissions == true
                     )
                 } else if (img != null) {
                     // remove bind mount even if not mounted
@@ -429,6 +447,42 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    fun toggleImagePreservePermissions(path: String, preserve: Boolean) {
+        if (!preserve) {
+            updateImportedImage(path) { it.copy(preservePermissions = false) }
+            _images.update { list ->
+                list.map { if (it.path == path) it.copy(preservePermissions = false) else it }
+            }
+            return
+        }
+        if (!settingsPrefs.getBoolean(KEY_PRESERVE_PERMISSIONS_CONFIRMED, false)) {
+            pendingPreservePermissionsPath = path
+            _showPreservePermissionsConfirm.value = true
+            return
+        }
+        updateImportedImage(path) { it.copy(preservePermissions = true) }
+        _images.update { list ->
+            list.map { if (it.path == path) it.copy(preservePermissions = true) else it }
+        }
+    }
+
+    fun confirmPreservePermissionsDialog() {
+        settingsPrefs.edit { putBoolean(KEY_PRESERVE_PERMISSIONS_CONFIRMED, true) }
+        _showPreservePermissionsConfirm.value = false
+        pendingPreservePermissionsPath?.let { path ->
+            updateImportedImage(path) { it.copy(preservePermissions = true) }
+            _images.update { list ->
+                list.map { if (it.path == path) it.copy(preservePermissions = true) else it }
+            }
+        }
+        pendingPreservePermissionsPath = null
+    }
+
+    fun dismissPreservePermissionsDialog() {
+        _showPreservePermissionsConfirm.value = false
+        pendingPreservePermissionsPath = null
+    }
+
     fun setImageBindDir(path: String, bindDir: String?) {
         val trimmed = bindDir?.trim()?.trimEnd('/')
         val validatedDir = trimmed?.takeIf { it.isNotEmpty() }
@@ -451,6 +505,10 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun applySettings() {
+        if (!settingsPrefs.getBoolean(KEY_SETTINGS_CONFIRMED, false)) {
+            _showSettingsConfirm.value = true
+            return
+        }
         viewModelScope.launch {
             withLockedUI {
                 val snapshot = _images.value
@@ -467,6 +525,17 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    fun confirmSettingsDialog() {
+        settingsPrefs.edit { putBoolean(KEY_SETTINGS_CONFIRMED, true) }
+        _showSettingsConfirm.value = false
+        applySettings()
+    }
+
+    fun dismissSettingsDialog() {
+        _showSettingsConfirm.value = false
+    }
+
+
     private suspend fun applyUnmounts(
         snapshot: List<ImageInfo>,
         allImported: List<ImportedImage>,
@@ -482,7 +551,8 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     unmountStem,
                     bindDir,
                     directMount = imported?.bindDir != null,
-                    imagePath = img.path
+                    imagePath = img.path,
+                    preservePermissions = imported?.preservePermissions == true
                 )
                 if (err != null) {
                     Log.e(TAG, "Unmount failed: ${img.path}")
@@ -553,7 +623,8 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 unmountStem,
                 bindDir,
                 directMount = imported?.bindDir != null,
-                imagePath = img.path
+                imagePath = img.path,
+                preservePermissions = imported?.preservePermissions == true
             )
             if (err != null) {
                 Log.e(TAG, "Remount unmount failed: ${img.path}")
@@ -677,7 +748,11 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 val ui = _images.value.find { it.path == path }
                 if (ui?.isMounted == true && ui.mountedImage != null) {
                     val unmountStem = mountedStem[path] ?: stemFor(path)
-                    val err = unmountWithCleanup(ui.mountedImage, unmountStem)
+                    val err = unmountWithCleanup(
+                        ui.mountedImage,
+                        unmountStem,
+                        preservePermissions = ui.preservePermissions
+                    )
                     if (err != null) {
                         alert(
                             Alert.Failure(
@@ -821,6 +896,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         mode: MountMode,
         stem: String,
         displayName: String,
+        preservePermissions: Boolean = false,
     ): MountResult {
         val pr = mountManager.probePartitions(path)
         if (pr == null) {
@@ -829,7 +905,12 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     hasPartitions = false, selectedPartitionIndex = null, diskLabel = null
                 )
             }
-            return mountManager.mountImage(path, mode, stem)
+            return mountManager.mountImage(
+                path,
+                mode,
+                stem,
+                preservePermissions = preservePermissions
+            )
         }
         val partition = pr.partitions.find { it.index == partIndex }
         if (partition == null) {
@@ -846,6 +927,8 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             )
             return MountResult.PartitionedImage(pr)
         }
-        return mountManager.mountPartition(path, partition, mode, stem)
+        return mountManager.mountPartition(
+            path, partition, mode, stem, preservePermissions = preservePermissions
+        )
     }
 }

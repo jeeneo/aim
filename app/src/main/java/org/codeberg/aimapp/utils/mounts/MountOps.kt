@@ -130,7 +130,6 @@ fun doMount(
                     numArg(7),
                     numArg(loopIdx),
                     busyboxBin = busyboxBin,
-                    suppressErr = true,
                     ignoreError = true
                 )
             }
@@ -189,11 +188,10 @@ fun doMount(
                     ShellArg.literal("-d"),
                     loopDevArg(dev),
                     busyboxBin = busyboxBin,
-                    suppressErr = true,
                     ignoreError = true
                 )
             }
-            RootShell.cmd("rmdir", pathArg(mountPoint), suppressErr = true, ignoreError = true)
+            RootShell.cmd("rmdir", pathArg(mountPoint), ignoreError = true)
         }
     }
 }
@@ -253,7 +251,6 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): O
         secontextArg(parentCtx),
         mpArg,
         busyboxBin = busyboxBin,
-        suppressErr = true,
         ignoreError = true
     )
     if (chcon.exitCode != 0) Log.w(TAG, "chcon failed: ${chcon.output}")
@@ -261,9 +258,12 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): O
 }
 
 private val OCTAL_MODE = Regex("^[0-7]{3,4}$")
+
 internal data class PermEntry(val path: String, val uid: Int, val gid: Int, val mode: String)
 
 fun snapshotPermissions(mountPoint: String, snapshotFile: String, busyboxBin: String): OpResult {
+    val snapshotArg = ShellArg.of(snapshotFile)
+    File(snapshotFile).apply { parentFile?.mkdirs() }
     val find = RootShell.cmd(
         "find",
         pathArg(mountPoint),
@@ -277,19 +277,22 @@ fun snapshotPermissions(mountPoint: String, snapshotFile: String, busyboxBin: St
         ShellArg.literal("{}"),
         ShellArg.literal("+"),
         busyboxBin = busyboxBin,
-        redirectErr = true
+        redirectErr = true,
+        outputTo = snapshotArg.quoted
     )
     if (find.exitCode != 0) {
         Log.w(TAG, "snapshotPermissions: find/stat failed: ${find.output.take(200)}")
         return OpResult.failure(Exception("Failed to snapshot permissions on $mountPoint"))
     }
-    return try {
-        File(snapshotFile).apply { parentFile?.mkdirs() }.writeText(find.output)
-        Log.d(TAG, "snapshotPermissions: saved ${find.output.length} bytes to $snapshotFile")
-        OpResult.success(snapshotFile)
-    } catch (e: Exception) {
-        OpResult.failure(Exception("Failed to persist permission snapshot: ${e.message}"))
+    val count = RootShell.cmd(
+        "wc", ShellArg.literal("-l"), snapshotArg, busyboxBin = busyboxBin
+    ).output.trim().substringBefore(' ').toIntOrNull()
+    if (count == null || count <= 0) {
+        Log.w(TAG, "snapshotPermissions: snapshot empty/invalid at $snapshotFile")
+        return OpResult.failure(Exception("Failed to snapshot permissions on $mountPoint"))
     }
+    Log.d(TAG, "snapshotPermissions: saved $count entries to $snapshotFile")
+    return OpResult.success(snapshotFile)
 }
 
 internal fun parseSnapshot(raw: String, mountPoint: String): List<PermEntry> {
@@ -316,37 +319,36 @@ private fun isPathUnderMount(path: String, mountPoint: String): Boolean {
     return path.substring(mountPoint.length + 1).split('/').none { it == ".." || it == "." }
 }
 
-fun restorePermissionsFromSnapshot(
+fun restorePermissions(
     mountPoint: String,
     snapshotFile: String,
-    fsType: FsType,
+    preservePermissions: Boolean,
     busyboxBin: String,
 ): OpResult {
-    if (!fsType.posixPermissions) return OpResult.success("skipped (non-POSIX filesystem)")
-
     val snapFile = File(snapshotFile)
     if (!snapFile.exists()) {
-        Log.w(TAG, "restorePermissionsFromSnapshot: no snapshot, falling back to reset")
-        return restorePermissions(mountPoint, busyboxBin)
+        Log.w(TAG, "restorePermissions: no snapshot, falling back to reset")
+        return resetPermissions(mountPoint, busyboxBin)
     }
-
+    if (!preservePermissions) {
+        Log.d(TAG, "restorePermissions: preservePermissions=false, resetting permissions")
+        return resetPermissions(mountPoint, busyboxBin)
+    }
     val raw = runCatching { snapFile.readText() }.getOrElse {
         return OpResult.failure(Exception("Failed to read permission snapshot: ${it.message}"))
     }
     val entries = parseSnapshot(raw, mountPoint)
     if (entries.isEmpty()) return OpResult.success("nothing to restore")
-
     val groups = entries.groupBy { Triple(it.uid, it.gid, it.mode) }
-    Log.d(TAG, "restore: ${entries.size} entries in ${groups.size} groups")
-
+    Log.d(TAG, "restorePermissions: restoring ${entries.size} entries in ${groups.size} groups")
     for ((key, group) in groups) {
         val (uid, gid, mode) = key
         val allPaths = group.map { it.path }
         for (batch in allPaths.chunked(500)) {
             val paths = batch.map { pathArg(it) }.toTypedArray()
-
             val chown = RootShell.cmd(
                 "chown",
+                ShellArg.literal("-h"),
                 ShellArg.of("$uid:$gid"),
                 *paths,
                 busyboxBin = busyboxBin,
@@ -364,7 +366,20 @@ fun restorePermissionsFromSnapshot(
                 )
             }
             val chmod = RootShell.cmd(
-                "chmod", ShellArg.of(mode), *paths, busyboxBin = busyboxBin, redirectErr = true
+                "find",
+                *paths,
+                ShellArg.literal("-maxdepth"),
+                ShellArg.literal("0"),
+                ShellArg.literal("-not"),
+                ShellArg.literal("-type"),
+                ShellArg.literal("l"),
+                ShellArg.literal("-exec"),
+                ShellArg.literal("chmod"),
+                ShellArg.of(mode),
+                ShellArg.literal("{}"),
+                ShellArg.literal("+"),
+                busyboxBin = busyboxBin,
+                redirectErr = true
             )
             if (chmod.exitCode != 0) {
                 return OpResult.failure(
@@ -382,12 +397,12 @@ fun restorePermissionsFromSnapshot(
     return OpResult.success("restored ${entries.size} entries in ${groups.size} groups")
 }
 
-fun restorePermissions(mountPoint: String, busyboxBin: String): OpResult {
-    Log.d(TAG, "restorePerms: restoring permissions for: $mountPoint")
+fun resetPermissions(mountPoint: String, busyboxBin: String): OpResult {
+    Log.d(TAG, "resetPermissions: restoring permissions for: $mountPoint")
     val mpArg = pathArg(mountPoint)
     val chown = RootShell.cmd(
         "chown",
-        ShellArg.literal("-R"),
+        ShellArg.literal("-Rh"),
         ShellArg.literal("1000:1000"),
         mpArg,
         busyboxBin = busyboxBin
@@ -403,6 +418,9 @@ fun restorePermissions(mountPoint: String, busyboxBin: String): OpResult {
             mpArg,
             ShellArg.literal("-type"),
             ShellArg.literal(type),
+            ShellArg.literal("-not"),
+            ShellArg.literal("-type"),
+            ShellArg.literal("l"),
             ShellArg.literal("-exec"),
             ShellArg.literal("chmod"),
             enumArg(mode, ALLOWED_CHMOD_MODES),
@@ -415,7 +433,7 @@ fun restorePermissions(mountPoint: String, busyboxBin: String): OpResult {
             return OpResult.failure(Exception("Failed to restore permissions ($type) on $mountPoint"))
         }
     }
-    Log.d(TAG, "restorePerms: restore done for $mountPoint")
+    Log.d(TAG, "resetPermissions: restore done for $mountPoint")
     return OpResult.success("permissions restored")
 }
 
@@ -427,10 +445,9 @@ fun failCleanup(mp: String, loop: String?, msg: String, busyboxBin: String): OpR
             ShellArg.literal("-d"),
             loopDevArg(dev),
             busyboxBin = busyboxBin,
-            suppressErr = true,
             ignoreError = true
         )
     }
-    RootShell.cmd("rmdir", pathArg(mp), suppressErr = true, ignoreError = true)
+    RootShell.cmd("rmdir", pathArg(mp), ignoreError = true)
     return OpResult.failure(Exception(msg))
 }

@@ -38,7 +38,7 @@ private fun resolveBusyboxPath(): String? {
             }
         } else {
             val resolved = RootShell.cmd(
-                "command", ShellArg.literal("-v"), ShellArg.of(candidate), suppressErr = true
+                "command", ShellArg.literal("-v"), ShellArg.of(candidate), ignoreError = true
             ).output.lineSequence().firstOrNull()?.trim()
             if (!resolved.isNullOrBlank()) return resolved
         }

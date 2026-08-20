@@ -47,7 +47,7 @@ fun hexProbe(
         ShellArg.literal("skip=$totalSkip"),
         ShellArg.literal("count=$count"),
         busyboxBin = busyboxBin,
-        suppressErr = true,
+        ignoreError = true,
         pipeInto = ShellCmd.of(
             "hexdump",
             ShellArg.literal("-v"),
@@ -101,7 +101,10 @@ fun probeFsMagic(probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALUE):
     return detectFsByMagic(probe, sizeBytes) ?: identifyUnsupportedFs(probe)
 }
 
-private fun detectFsByMagic(probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALUE): FsType? {
+private fun detectFsByMagic(
+    probe: (Int, Int) -> String,
+    sizeBytes: Long = Long.MAX_VALUE
+): FsType? {
     if (probe(1080, 2) == EXT4_MAGIC_HEX) return FsType.EXT4
     if (probe(510, 2) == FAT_SIG_HEX) {
         if (probe(3, 5) == EXFAT_OEM_HEX) return FsType.EXFAT
@@ -155,7 +158,6 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): Detec
         out.replace('\n', ' ').replace(Regex("\\s+"), " ").trim()
             .let { if (it.length <= max) it else it.take(max) + "..." }
     Log.d(TAG, "start for $imagePath")
-    Log.d(TAG, "kernel filesystems: ${RootShell.cmd("cat", ShellArg.literal("/proc/filesystems"), busyboxBin = busyboxBin).output.trim()}")
     val blkidAttempts = mutableListOf<String>()
 
     // blkid attempt 1: system blkid
@@ -167,7 +169,7 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): Detec
             ShellArg.literal("-s"),
             ShellArg.literal("TYPE"),
             imgArg,
-            suppressErr = true
+            ignoreError = true
         )
         val norm = r.output.trim().lowercase()
         blkidAttempts += "#1: code=${r.exitCode}, type='${summarize(norm)}'"
@@ -187,7 +189,7 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): Detec
             ShellArg.literal("TYPE"),
             imgArg,
             busyboxBin = busyboxBin,
-            suppressErr = true
+            ignoreError = true
         )
         val norm = r.output.trim().lowercase()
         blkidAttempts += "#2: code=${r.exitCode}, type='${summarize(norm)}'"

@@ -29,6 +29,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -38,6 +40,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -104,6 +107,8 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     val scope = rememberCoroutineScope()
     var dialogImagePath by remember { mutableStateOf<String?>(null) }
     var showBindDirEdit by remember { mutableStateOf(false) }
+    val showSettingsConfirm by viewModel.showSettingsConfirm.collectAsState()
+    val showPreservePermissionsConfirm by viewModel.showPreservePermissionsConfirm.collectAsState()
 
     LaunchedEffect(alerts) {
         alerts.firstOrNull()?.let { alert ->
@@ -130,6 +135,42 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
             onConfirm = { newDir ->
                 viewModel.setBindDir(newDir)
                 showBindDirEdit = false
+            },
+        )
+    }
+
+    if (showSettingsConfirm) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissSettingsDialog() },
+            title = { Text(text = stringResource(R.string.posix_warning_header)) },
+            text = { Text(text = stringResource(R.string.posix_warning_body)) },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissSettingsDialog() }) {
+                    Text(text = stringResource(R.string.cancel))
+                }
+            },
+            confirmButton = {
+                Button(onClick = { viewModel.confirmSettingsDialog() }) {
+                    Text(text = stringResource(R.string.ok))
+                }
+            },
+        )
+    }
+
+    if (showPreservePermissionsConfirm) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissPreservePermissionsDialog() },
+            title = { Text(text = stringResource(R.string.preserve_permissions_warning_header)) },
+            text = { Text(text = stringResource(R.string.preserve_permissions_warning_body)) },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissPreservePermissionsDialog() }) {
+                    Text(text = stringResource(R.string.cancel))
+                }
+            },
+            confirmButton = {
+                Button(onClick = { viewModel.confirmPreservePermissionsDialog() }) {
+                    Text(text = stringResource(R.string.ok))
+                }
             },
         )
     }
@@ -180,6 +221,10 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
             },
             onBindDirReset = {
                 viewModel.setImageBindDir(dialogImage.path, null)
+            },
+            preservePermissions = dialogImage.preservePermissions,
+            onPreservePermissionsChange = { preserve ->
+                viewModel.toggleImagePreservePermissions(dialogImage.path, preserve)
             },
         )
     }
@@ -415,8 +460,12 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
             modifier = Modifier
                 .align(if (sheetShowing) Alignment.TopCenter else Alignment.BottomCenter)
                 .then(
-                    if (sheetShowing) Modifier.statusBarsPadding().padding(top = 8.dp)
-                    else Modifier.navigationBarsPadding().padding(bottom = 8.dp)
+                    if (sheetShowing) Modifier
+                        .statusBarsPadding()
+                        .padding(top = 8.dp)
+                    else Modifier
+                        .navigationBarsPadding()
+                        .padding(bottom = 8.dp)
                 )
         ) {
             SnackbarHost(hostState = snackbarHostState)
