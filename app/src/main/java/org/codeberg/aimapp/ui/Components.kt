@@ -14,23 +14,37 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,7 +56,6 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import org.codeberg.aimapp.PartitionPickerOrigin
 import org.codeberg.aimapp.R
 import org.codeberg.aimapp.utils.mounts.PartitionEntry
 import org.codeberg.aimapp.utils.mounts.PartitionScheme
@@ -121,9 +134,16 @@ fun ImageOptionsDialog(
                 )
                 Switch(
                     checked = safExposed,
+                    thumbContent = {
+                        Icon(
+                            imageVector = if (safExposed) Icons.Filled.Check else Icons.Filled.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(SwitchDefaults.IconSize),
+                        )
+                    },
                     onCheckedChange = { HapticPatterns.tap(); onSafChange(!safExposed) },
                     modifier = Modifier
-                        .height(18.dp)
+                        .height(21.dp)
                         .aspectRatio(2f)
                         .wrapContentSize(Alignment.Center)
                 )
@@ -139,9 +159,16 @@ fun ImageOptionsDialog(
                 )
                 Switch(
                     checked = storageExposed,
+                    thumbContent = {
+                        Icon(
+                            imageVector = if (storageExposed) Icons.Filled.Check else Icons.Filled.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(SwitchDefaults.IconSize),
+                        )
+                    },
                     onCheckedChange = { HapticPatterns.tap(); onStorageChange(!storageExposed) },
                     modifier = Modifier
-                        .height(18.dp)
+                        .height(21.dp)
                         .aspectRatio(2f)
                         .wrapContentSize(Alignment.Center)
                 )
@@ -292,15 +319,14 @@ fun PartitionPickerDialog(
     totalSizeBytes: Long,
     scheme: PartitionScheme = PartitionScheme.MBR,
     initialSelectedIndex: Int? = null,
-    origin: PartitionPickerOrigin,
+    isMountFlow: Boolean,
     onDismiss: () -> Unit,
     onSelect: (PartitionEntry) -> Unit,
 ) {
-    val infoOnly = partitions.size == 1
+    val multipart = partitions.size >= 2
     val savedIndex =
         initialSelectedIndex?.let { idx -> partitions.indexOfFirst { it.index == idx } }
             ?.takeIf { it >= 0 }
-    val isMountFlow = origin == PartitionPickerOrigin.MountFlow
     val sheetState = rememberExpandedSheetState()
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -342,18 +368,19 @@ fun PartitionPickerDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 partitions.forEachIndexed { index, part ->
                     val totalPartitions = partitions.size
-                    val mountable = part.detectedFs != null
+                    val supported = part.detectedFs != null
+                    val selected = if (multipart) supported && savedIndex == index else supported
+                    val enabled = supported && multipart
                     GroupedRow(
-                        position = positionFor(index + 1, totalPartitions), onClick = {
-                            if (mountable) {
-                                HapticPatterns.tap(); onSelect(part)
-                            }
-                        }, enabled = !infoOnly
+                        position = positionFor(index + 1, totalPartitions),
+                        onClick = { onSelect(part) },
+                        enabled = enabled,
+                        selected = selected
                     ) {
                         RadioButton(
-                            selected = savedIndex == index,
+                            selected = selected,
                             onClick = null,
-                            enabled = !infoOnly && mountable,
+                            enabled = enabled,
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -362,13 +389,12 @@ fun PartitionPickerDialog(
                                     text = part.label ?: stringResource(
                                         R.string.partition_label_part, part.index
                                     ),
-                                    style = MaterialTheme.typography.titleSmall,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = part.typeName,
+                                    text = "(${part.typeName})",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -380,6 +406,14 @@ fun PartitionPickerDialog(
                                         color = MaterialTheme.colorScheme.primary,
                                     )
                                 }
+                                if (!supported) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = stringResource(R.string.dialog_partition_unsupported),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.height(2.dp))
                             Row {
@@ -387,29 +421,20 @@ fun PartitionPickerDialog(
                                     text = formatSize(part.sizeBytes),
                                     style = MaterialTheme.typography.bodySmall,
                                 )
-                                val fsLabel = part.detectedFs?.mountType
-                                    ?: stringResource(R.string.dialog_partition_unsupported)
-                                Text(
-                                    text = fsLabel,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (mountable) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.error,
-                                )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             val fraction =
                                 if (barTotal > 0) (part.sizeBytes.toFloat() / barTotal).coerceIn(
                                     0.01f, 1f
                                 ) else 0.01f
-                            Box(
+                            LinearProgressIndicator(
+                                progress = { fraction },
                                 modifier = Modifier
-                                    .fillMaxWidth(fraction)
+                                    .fillMaxWidth()
                                     .height(4.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(
-                                        if (mountable) partitionColor(index)
-                                        else MaterialTheme.colorScheme.outlineVariant
-                                    ),
+                                    .clip(RoundedCornerShape(2.dp)),
+                                color = MaterialTheme.colorScheme.secondary,
+                                trackColor = MaterialTheme.colorScheme.outlineVariant,
                             )
                         }
                     }
@@ -429,21 +454,19 @@ private fun DiskBar(partitions: List<PartitionEntry>, totalBytes: Long) {
             .clip(RoundedCornerShape(4.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
-        partitions.forEachIndexed { idx, part ->
+        partitions.forEachIndexed { _, part ->
             val weight = (part.sizeBytes.toFloat() / totalBytes).coerceAtLeast(0.02f)
             Box(
                 modifier = Modifier
                     .weight(weight)
                     .height(20.dp)
                     .padding(horizontal = 0.5.dp)
-                    .background(partitionColor(idx)),
+                    .background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center,
             ) {
-                if (weight > 0.08f) {
+                if (weight > 0.1f) {
                     Text(
-                        text = part.label ?: stringResource(
-                            R.string.partition_bar_label, part.index
-                        ),
+                        text = part.label ?: part.typeName,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onPrimary,
                         maxLines = 1,
@@ -455,10 +478,21 @@ private fun DiskBar(partitions: List<PartitionEntry>, totalBytes: Long) {
 }
 
 @Composable
-private fun partitionColor(index: Int) = when (index % 5) {
-    0 -> MaterialTheme.colorScheme.primary
-    1 -> MaterialTheme.colorScheme.tertiary
-    2 -> MaterialTheme.colorScheme.secondary
-    3 -> MaterialTheme.colorScheme.error
-    else -> MaterialTheme.colorScheme.inversePrimary
+fun SnackbarHost(hostState: SnackbarHostState) {
+    SnackbarHost(hostState = hostState) { data ->
+        val dismissState = rememberSwipeToDismissBoxState()
+        LaunchedEffect(dismissState.currentValue) {
+            if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
+                data.dismiss()
+            }
+        }
+        SwipeToDismissBox(
+            state = dismissState,
+            backgroundContent = { },
+            enableDismissFromStartToEnd = true,
+            enableDismissFromEndToStart = true,
+        ) {
+            Snackbar(snackbarData = data)
+        }
+    }
 }

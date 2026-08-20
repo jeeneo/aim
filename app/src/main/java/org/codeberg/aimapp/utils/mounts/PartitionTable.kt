@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// why dont we just use `partx`?
-// decisive decision to implement custom parsing logic cause it's uhhh yeah (T^T)
-// 1) parsing logic is hard 2) why add a new binary requirement?
-
 package org.codeberg.aimapp.utils.mounts
 
 import android.content.Context
@@ -11,9 +7,9 @@ import android.util.Log
 import org.codeberg.aimapp.R
 import org.codeberg.aimapp.utils.disk.VALID_FAT_BPS
 import org.codeberg.aimapp.utils.disk.VALID_FAT_NFATS
-import org.codeberg.aimapp.utils.disk.detectFsByMagic
+import org.codeberg.aimapp.utils.disk.detectFatVariant
 import org.codeberg.aimapp.utils.disk.hexProbe
-import org.codeberg.aimapp.utils.disk.identifyUnsupportedFs
+import org.codeberg.aimapp.utils.disk.probeFsMagic
 import org.codeberg.aimapp.utils.paths.labelToMountStem
 import org.codeberg.aimapp.utils.paths.probeLabel
 import org.codeberg.aimapp.utils.shell.RootShell
@@ -79,11 +75,13 @@ data class PartitionEntry(
 
 enum class PartitionScheme { MBR, GPT }
 
-private fun fsDisplayName(ctx: Context, fs: FsType): String = when (fs) {
+fun fsDisplayName(ctx: Context, fs: FsType?, probe: ((Int, Int) -> String)? = null): String = when (fs) {
     FsType.EXT4 -> "ext4"
-    FsType.VFAT -> "FAT"
+    FsType.VFAT -> (probe?.let { detectFatVariant(it) }) ?: "FAT"
     FsType.EXFAT -> "exFAT"
-    else -> ctx.getString(R.string.partition_type_unknown)
+    FsType.ISO9660 -> "ISO9660"
+    is FsType.OTHER -> fs.name
+    null -> ctx.getString(R.string.image_type_image)
 }
 
 data class PartitionTableInfo(
@@ -122,8 +120,7 @@ fun probePartitionTable(ctx: Context, imagePath: String, busyboxBin: String): Pa
             val end = p.offsetBytes + p.sizeBytes
             if (p.offsetBytes < 0 || p.sizeBytes < 0 || end < 0 || p.offsetBytes > totalSize) {
                 Log.w(
-                    TAG,
-                    "P${p.index}: partition boundaries invalid or exceed image size, skipping"
+                    TAG, "P${p.index}: partition boundaries invalid or exceed image size, skipping"
                 )
                 true
             } else false
@@ -149,13 +146,13 @@ fun probePartitionFilesystems(
         fun probe(skip: Int, count: Int) =
             hexProbe(imagePath, skip, count, busyboxBin, imgArg, offset)
 
-        val detected = detectFsByMagic(::probe, part.sizeBytes)
+        val detected = probeFsMagic(::probe, part.sizeBytes)
         val rawLabel =
             (if (detected != null) probeLabel(::probe, detected, part.sizeBytes) else null)
                 ?: part.label
         val label = labelToMountStem(rawLabel)
         if (detected != null) {
-            val refinedTypeName = fsDisplayName(ctx, detected)
+            val typeName = fsDisplayName(ctx, detected, ::probe)
             Log.d(
                 TAG,
                 "P${part.index}: ${detected.mountType}" + if (label != null) " label='$label'" else ""
@@ -163,16 +160,15 @@ fun probePartitionFilesystems(
             part.copy(
                 detectedFs = detected,
                 detectedFsName = detected.mountType,
-                typeName = refinedTypeName,
+                typeName = typeName,
                 label = label
             )
         } else {
-            val fsName = identifyUnsupportedFs(::probe)
             Log.d(
                 TAG,
-                "P${part.index}: ${fsName ?: "unknown"} fs (type=0x${"%02X".format(part.typeId)})"
+                "P${part.index}: unknown fs (type=0x${"%02X".format(part.typeId)})"
             )
-            part.copy(detectedFsName = fsName, typeName = fsName ?: part.typeName)
+            part
         }
     }
 }

@@ -15,7 +15,7 @@ It is installed as a normal app and root access is required.
   - Including mixing and matching different filesystems
 * Formatting (`exFAT`, `ext4`)
 * Multi partition support
-* Mounting on internal storage and in documents provider
+* Mounting on internal storage (bind mount) and in documents provider
 
 Can be paired with [MSD](https://github.com/chenxiaolong/MSD)
 
@@ -28,6 +28,7 @@ Can be paired with [MSD](https://github.com/chenxiaolong/MSD)
 * Device must have filesystem support (most devices do)
   - Run `cat /proc/filesystems` in a rooted shell to check if they exist.
 * Only tested on AOSP based ROMs
+* POSIX-based filesystems reset to 1000:1000, only use images with a single permission scheme
 
 > [!CAUTION]
 > This application runs shell commands as root (`busybox`, `mount`, etc) and processes arbitrary user input. This introduces security risks. While protective measures have been implemented to prevent potential issues, no guarantees can be made. Use at your own risk.

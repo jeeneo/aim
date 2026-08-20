@@ -38,7 +38,7 @@
         <item quantity="one">This image has %1$d partition.</item>
         <item quantity="other">This image has %1$d partitions.</item>
     </plurals>
-    <string name="dialog_partition_boot">boot</string>
+    <string name="dialog_partition_boot">(bootable)</string>
     <string name="dialog_partition_unsupported">unsupported</string>
     <string name="alert_format_success">Formatted successfully as %s</string>
     <string name="alert_bind_dir_set">Bind directory set to %s</string>
@@ -117,4 +117,8 @@
     <string name="error_mount_not_visible">Mount did not appear in /proc/mounts after success. Your root shell likely uses an isolated mount namespace. Enable global/mount-master namespace in your root manager.</string>
     <string name="error_cannot_resolve_path">Cannot resolve path for %s</string>
     <string name="error_failed_to_access_image">Failed to access image: %s</string>
+    <string name="cancel">Cancel</string>
+    <string name="posix_warning_header">POSIX permissions</string>
+    <string name="posix_warning_body">Please note, when mounting ext4 or other POSIX compatible filesystems, for Android to access the image, the app needs to change the ownership of the file(s)/folder(s) on the image. When unmounted, permissions will be reset to UID/GID 1000:1000 and 775 (rwxrwxr-x) for directories and 664 (rw-rw-r--) for files. This message will only appear once.</string>
+    <string name="ok">OK</string>
 </resources>

@@ -19,11 +19,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.codeberg.aimapp.utils.SAFImageProvider
-import org.codeberg.aimapp.utils.checkEnvironment as runEnvCheck
-import org.codeberg.aimapp.utils.envStatus as envStatusFlow
 import org.codeberg.aimapp.utils.disk.DetectFsResult
 import org.codeberg.aimapp.utils.disk.detectFilesystem
-import org.codeberg.aimapp.utils.disk.formatImage as formatDiskImage
 import org.codeberg.aimapp.utils.mounts.BindResult
 import org.codeberg.aimapp.utils.mounts.EnvironmentStatus
 import org.codeberg.aimapp.utils.mounts.ImageStore
@@ -34,11 +31,15 @@ import org.codeberg.aimapp.utils.mounts.MountedImage
 import org.codeberg.aimapp.utils.mounts.PartitionEntry
 import org.codeberg.aimapp.utils.mounts.PartitionScheme
 import org.codeberg.aimapp.utils.mounts.PartitionedImageResult
+import org.codeberg.aimapp.utils.mounts.fsDisplayName
 import org.codeberg.aimapp.utils.mounts.generateMountStem
 import org.codeberg.aimapp.utils.paths.ImagePathResolver
 import org.codeberg.aimapp.utils.paths.validateBindDir
 import org.codeberg.aimapp.utils.paths.validatePath
 import java.io.File
+import org.codeberg.aimapp.utils.checkEnvironment as runEnvCheck
+import org.codeberg.aimapp.utils.disk.formatImage as formatDiskImage
+import org.codeberg.aimapp.utils.envStatus as envStatusFlow
 
 
 data class ImportedImage(
@@ -76,14 +77,6 @@ sealed interface Alert {
     data class Info(override val message: String) : Alert
 }
 
-enum class PartitionPickerOrigin {
-    /** Opened automatically because a mount attempt discovered partitions. */
-    MountFlow,
-
-    /** Opened explicitly by the user via "Change Partition" / "Partition Info". */
-    UserRequested,
-}
-
 data class PartitionState(
     val imagePath: String,
     val displayName: String,
@@ -91,7 +84,7 @@ data class PartitionState(
     val totalSizeBytes: Long,
     val scheme: PartitionScheme = PartitionScheme.MBR,
     val selectedPartitionIndex: Int? = null,
-    val origin: PartitionPickerOrigin,
+    val isMountFlow: Boolean = false,
 )
 
 class MainActivityViewModel(application: Application) : AndroidViewModel(application) {
@@ -99,6 +92,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         private val TAG = MainActivityViewModel::class.java.simpleName
         private const val PREFS_SETTINGS = "app_settings"
         private const val KEY_BIND_DIR = "bindmount_dir"
+        private const val KEY_SETTINGS_CONFIRMED = "settings_confirmed"
         private const val DEFAULT_BIND_DIR = "/storage/emulated/0/mounts"
     }
 
@@ -110,9 +104,9 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     private data class BindState(val bindDir: String, val directMount: Boolean)
 
     private val mountedBindState = mutableMapOf<String, BindState>()
-    private val busyCount = MutableStateFlow(0)
+    private val _busyCount = MutableStateFlow(0)
     val isBusy: StateFlow<Boolean> =
-        busyCount.map { it != 0 }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+        _busyCount.map { it != 0 }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     private val _alerts = MutableStateFlow<List<Alert>>(emptyList())
     val alerts: StateFlow<List<Alert>> = _alerts
     private val _envChecked = MutableStateFlow(false)
@@ -131,6 +125,9 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         settingsPrefs.getString(KEY_BIND_DIR, DEFAULT_BIND_DIR) ?: DEFAULT_BIND_DIR
     )
     val bindDir: StateFlow<String> = _bindDir
+
+    private val _showSettingsConfirm = MutableStateFlow(false)
+    val showSettingsConfirm: StateFlow<Boolean> = _showSettingsConfirm
 
     private fun errorText(
         throwable: Throwable,
@@ -158,11 +155,11 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private suspend fun <T> withLockedUI(block: suspend () -> T): T {
-        busyCount.update { it + 1 }
+        _busyCount.update { it + 1 }
         try {
             return block()
         } finally {
-            busyCount.update { it - 1 }
+            _busyCount.update { it - 1 }
         }
     }
 
@@ -457,6 +454,10 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun applySettings() {
+        if (!settingsPrefs.getBoolean(KEY_SETTINGS_CONFIRMED, false)) {
+            _showSettingsConfirm.value = true
+            return
+        }
         viewModelScope.launch {
             withLockedUI {
                 val snapshot = _images.value
@@ -471,6 +472,16 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 else alert(Alert.Success(app.getString(R.string.alert_settings_applied_success)))
             }
         }
+    }
+
+    fun confirmSettingsDialog() {
+        settingsPrefs.edit { putBoolean(KEY_SETTINGS_CONFIRMED, true) }
+        _showSettingsConfirm.value = false
+        applySettings()
+    }
+
+    fun dismissSettingsDialog() {
+        _showSettingsConfirm.value = false
     }
 
     private suspend fun applyUnmounts(
@@ -672,7 +683,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 totalSizeBytes = pr.tableInfo.totalSizeBytes,
                 scheme = pr.tableInfo.scheme,
                 selectedPartitionIndex = imported?.selectedPartitionIndex,
-                origin = PartitionPickerOrigin.MountFlow,
+                isMountFlow = true,
             )
         )
     }
@@ -729,7 +740,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     fun dismissPartitionPicker() {
         val picker = _partitionPicker.value
         dequeueNextPartitionPicker()
-        if (picker != null && picker.origin == PartitionPickerOrigin.MountFlow) {
+        if (picker != null && picker.isMountFlow) {
             _images.update { list ->
                 list.map { if (it.path == picker.imagePath) it.copy(enabled = false) else it }
             }
@@ -739,7 +750,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     fun selectPartition(partition: PartitionEntry) {
         val picker = _partitionPicker.value ?: return
         savePartitionSelection(picker.imagePath, partition)
-        if (picker.origin == PartitionPickerOrigin.MountFlow) {
+        if (picker.isMountFlow) {
             dequeueNextPartitionPicker()
         } else {
             _partitionPicker.update { it?.copy(selectedPartitionIndex = partition.index) }
@@ -774,14 +785,14 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                             totalSizeBytes = result.tableInfo.totalSizeBytes,
                             scheme = result.tableInfo.scheme,
                             selectedPartitionIndex = imported?.selectedPartitionIndex,
-                            origin = PartitionPickerOrigin.UserRequested,
                         )
                     )
                 } else {
                     val fileSize = withContext(Dispatchers.IO) { File(path).length() }
                     val detectedFs = try {
                         withContext(Dispatchers.IO) {
-                            when (val d = detectFilesystem(app, path, "")) {
+                            when (val d =
+                                detectFilesystem(app, path, envStatus.value.busyboxPath)) {
                                 is DetectFsResult.Found -> d.fs
                                 is DetectFsResult.Unknown -> null
                                 is DetectFsResult.AccessError -> {
@@ -797,8 +808,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                         index = 1,
                         bootable = false,
                         typeId = 0,
-                        typeName = detectedFs?.mountType
-                            ?: app.getString(R.string.image_type_image),
+                        typeName = fsDisplayName(app, detectedFs),
                         startLBA = 0L,
                         sizeSectors = if (fileSize > 0) fileSize / 512 else 0L,
                         offsetBytes = 0L,
@@ -815,7 +825,6 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                             totalSizeBytes = fileSize,
                             scheme = PartitionScheme.MBR,
                             selectedPartitionIndex = imported?.selectedPartitionIndex,
-                            origin = PartitionPickerOrigin.UserRequested,
                         )
                     )
                 }
@@ -849,7 +858,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     totalSizeBytes = pr.tableInfo.totalSizeBytes,
                     scheme = pr.tableInfo.scheme,
                     selectedPartitionIndex = null,
-                    origin = PartitionPickerOrigin.MountFlow,
+                    isMountFlow = true,
                 )
             )
             return MountResult.PartitionedImage(pr)

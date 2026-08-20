@@ -11,7 +11,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.codeberg.aimapp.R
 import org.codeberg.aimapp.utils.disk.DetectFsResult
-import org.codeberg.aimapp.utils.disk.FS_LIST
+import org.codeberg.aimapp.utils.disk.FS_MAP
 import org.codeberg.aimapp.utils.disk.PartitionedImageException
 import org.codeberg.aimapp.utils.disk.detectFilesystem
 import org.codeberg.aimapp.utils.envStatus
@@ -31,14 +31,16 @@ import java.io.File
 
 enum class MountMode { LOCAL, PUBLIC }
 
-enum class FsType(
+sealed class FsType(
     val mountType: String,
     val posixPermissions: Boolean,
     val readOnly: Boolean = false,
 ) {
-    EXT4("ext4", true), VFAT("vfat", false), EXFAT("exfat", false), ISO9660(
-        "iso9660", false, readOnly = true
-    ),
+    data object EXT4 : FsType("ext4", posixPermissions = true)
+    data object VFAT : FsType("vfat", posixPermissions = false)
+    data object EXFAT : FsType("exfat", posixPermissions = false)
+    data object ISO9660 : FsType("iso9660", posixPermissions = false, readOnly = true)
+    data class OTHER(val name: String) : FsType(name, posixPermissions = true)
 }
 
 data class MountedImage(
@@ -197,7 +199,7 @@ class MountManager(
             val device = p.getOrNull(0)
             val mountPoint = p.getOrNull(1)
             val fsTypeStr = p.getOrNull(2)
-            val fs = fsTypeStr?.let { FS_LIST[it] }
+            val fs = fsTypeStr?.let { FS_MAP[it] ?: FsType.OTHER(it) }
             when {
                 p.size < 3 -> Log.d(TAG, "SKIP (fields=${p.size}): $line").let { null }
 
@@ -288,7 +290,7 @@ class MountManager(
                 refreshMountedImages()
                 return fail(R.string.error_image_already_mounted)
             }
-            loops.forEach { Log.w(TAG, "Stale loop $it — detaching"); detachLoop(it) }
+            loops.forEach { Log.w(TAG, "Stale loop $it, detaching"); detachLoop(it) }
         }
 
         val stem = sanitizeStem(
@@ -334,8 +336,8 @@ class MountManager(
         val mpArg = pathArg(item.mountPoint)
 
         if (item.fsType.posixPermissions) {
-            restorePermissions(item.mountPoint, busyboxBin).onFailure {
-                Log.w(TAG, "restorePermissions failed for ${item.mountPoint}: ${it.message}")
+            setDefaultPermissions(item.mountPoint, busyboxBin).onFailure {
+                Log.w(TAG, "setDefaultPermissions failed for ${item.mountPoint}: ${it.message}")
             }
         }
 
@@ -484,7 +486,7 @@ class MountManager(
         ).let { it.exitCode == 0 && it.output.isNotBlank() }
     }
 
-    // canonicalizes and double-checks [bindDir] against [org.codeberg.aimapp.utils.paths.validateBindDir] to detect symlink
+    // canonicalizes and double-checks [bindDir] against [validateBindDir] to detect symlink
     // races between the two resolutions. Returns null if the path is rejected at any stage.
     private fun resolveAndValidateBindDir(bindDir: String): String? {
         if (validateBindDir(ctx, bindDir) != null) {
@@ -508,7 +510,7 @@ class MountManager(
             return null
         }
         if (verified != resolved) {
-            Log.e(TAG, "bindDir changed between resolutions — possible symlink race: $bindDir")
+            Log.e(TAG, "bindDir changed between resolutions, possible symlink race: $bindDir")
             return null
         }
         return resolved

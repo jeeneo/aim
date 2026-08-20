@@ -24,11 +24,11 @@ private const val EXT4_MAGIC_HEX = "53ef"
 private const val FAT_SIG_HEX = "55aa"
 private const val ISO_MAGIC_HEX = "4344303031" // "CD001"
 
-val FS_LIST = mapOf(
+internal val FS_MAP = mapOf(
     "ext4" to FsType.EXT4,
     "vfat" to FsType.VFAT,
     "exfat" to FsType.EXFAT,
-    "iso9660" to FsType.ISO9660, // rare
+    "iso9660" to FsType.ISO9660,
 )
 
 fun hexProbe(
@@ -59,7 +59,49 @@ fun hexProbe(
     return ddResult.output.trim().lowercase()
 }
 
-fun detectFsByMagic(probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALUE): FsType? {
+// little-endian unsigned int from a hex string (2 hex chars per byte)
+private fun parseLEHex(hex: String): Long {
+    var result = 0L
+    for (i in hex.indices step 2) {
+        result = result or (hex.substring(i, i + 2).toLong(16) shl (i / 2 * 8))
+    }
+    return result
+}
+
+// FAT12/16/32
+fun detectFatVariant(probe: (Int, Int) -> String): String? {
+    val bytesPerSector = parseLEHex(probe(11, 2))
+    val sectorsPerCluster = parseLEHex(probe(13, 1))
+    val reservedSectors = parseLEHex(probe(14, 2))
+    val numFats = parseLEHex(probe(16, 1))
+    val rootEntryCount = parseLEHex(probe(17, 2))
+    val totalSectors16 = parseLEHex(probe(19, 2))
+    val fatSize16 = parseLEHex(probe(22, 2))
+    val totalSectors32 = parseLEHex(probe(32, 4))
+    val fatSize32 = parseLEHex(probe(36, 4)) // only meaningful past FAT16's BPB layout
+
+    if (bytesPerSector == 0L || sectorsPerCluster == 0L) return null
+    val rootDirSectors = ((rootEntryCount * 32) + (bytesPerSector - 1)) / bytesPerSector
+    val fatSize = fatSize16.takeIf { it != 0L } ?: fatSize32
+    val totalSectors = totalSectors16.takeIf { it != 0L } ?: totalSectors32
+    if (fatSize == 0L || totalSectors == 0L) return null
+
+    val dataSectors = totalSectors - (reservedSectors + numFats * fatSize + rootDirSectors)
+    if (dataSectors <= 0) return null
+    val clusterCount = dataSectors / sectorsPerCluster
+
+    return when {
+        clusterCount < 4085 -> "FAT12" // only relevant to floppies really
+        clusterCount < 65525 -> "FAT16"
+        else -> "FAT32"
+    }
+}
+
+fun probeFsMagic(probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALUE): FsType? {
+    return detectFsByMagic(probe, sizeBytes) ?: identifyUnsupportedFs(probe)
+}
+
+private fun detectFsByMagic(probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALUE): FsType? {
     if (probe(1080, 2) == EXT4_MAGIC_HEX) return FsType.EXT4
     if (probe(510, 2) == FAT_SIG_HEX) {
         if (probe(3, 5) == EXFAT_OEM_HEX) return FsType.EXFAT
@@ -72,9 +114,8 @@ fun detectFsByMagic(probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALU
     return null
 }
 
-// identify known-but-unsupported filesystems by magic bytes
-fun identifyUnsupportedFs(probe: (Int, Int) -> String): String? {
-    return if (probe(3, 4) == NTFS_OEM_HEX) "NTFS" else null
+fun identifyUnsupportedFs(probe: (Int, Int) -> String): FsType? {
+    return if (probe(3, 4) == NTFS_OEM_HEX) FsType.OTHER("ntfs3") else null
 }
 
 class PartitionedImageException(val tableInfo: PartitionTableInfo) :
@@ -114,6 +155,7 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): Detec
         out.replace('\n', ' ').replace(Regex("\\s+"), " ").trim()
             .let { if (it.length <= max) it else it.take(max) + "..." }
     Log.d(TAG, "start for $imagePath")
+    Log.d(TAG, "kernel filesystems: ${RootShell.cmd("cat", ShellArg.literal("/proc/filesystems"), busyboxBin = busyboxBin).output.trim()}")
     val blkidAttempts = mutableListOf<String>()
 
     // blkid attempt 1: system blkid
@@ -131,9 +173,7 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): Detec
         blkidAttempts += "#1: code=${r.exitCode}, type='${summarize(norm)}'"
         Log.d(TAG, "blkid 1 exit=${r.exitCode}, out=${summarize(norm)}")
         if (r.exitCode == 0 && r.output.isNotBlank()) {
-            FS_LIST[norm]?.let { return DetectFsResult.Found(it) }
-            Log.w(TAG, "system blkid reported unsupported fs '$norm'")
-            return DetectFsResult.Unknown
+            return DetectFsResult.Found(FS_MAP[norm] ?: FsType.OTHER(norm))
         }
     }
 
@@ -153,18 +193,15 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): Detec
         blkidAttempts += "#2: code=${r.exitCode}, type='${summarize(norm)}'"
         Log.d(TAG, "blkid 2 exit=${r.exitCode}, out=${summarize(norm)}")
         if (r.exitCode == 0 && r.output.isNotBlank()) {
-            FS_LIST[norm]?.let { return DetectFsResult.Found(it) }
-            Log.w(TAG, "busybox blkid reported unsupported fs '$norm'")
-            return DetectFsResult.Unknown
+            return DetectFsResult.Found(FS_MAP[norm] ?: FsType.OTHER(norm))
         }
     }
 
     fun probe(skip: Int, count: Int) = hexProbe(imagePath, skip, count, busyboxBin, imgArg)
 
-    val result = detectFsByMagic(::probe)
-    if (result != null) return DetectFsResult.Found(result)
+    probeFsMagic(::probe)?.let { return DetectFsResult.Found(it) }
 
-    // detectFsByMagic returns null on 55AA with invalid BPB - check for partition table
+    // neither supported nor known-unsupported, check for partition table
     val fatSig = probe(510, 2)
     if (fatSig == "55aa") {
         Log.w(TAG, "55AA boot sig found but BPB invalid - partitioned disk image?")

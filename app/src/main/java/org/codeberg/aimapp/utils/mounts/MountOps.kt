@@ -17,7 +17,6 @@ import org.codeberg.aimapp.utils.shell.secontextArg
 
 private const val TAG = "MountOps"
 
-private val ALLOWED_FS_TYPES = setOf("ext4", "vfat", "exfat", "iso9660")
 val ALLOWED_CHMOD_MODES = setOf("777", "775", "664")
 private fun detailOrUnknown(output: String): String = output.trim().ifBlank { "no command output" }
 
@@ -30,11 +29,12 @@ fun buildMountOpts(fsType: FsType, mode: MountMode): String {
         FsType.VFAT -> "$base,uid=0,gid=0,fmask=0000,dmask=0000,allow_utime=0022,iocharset=utf8"
         FsType.EXFAT -> "$base,uid=0,gid=0,fmask=0000,dmask=0000"
         FsType.ISO9660 -> error("ISO9660 must be read-only; FsType.readOnly invariant violated")
+        is FsType.OTHER -> base
     }
 }
 
 private fun checkKernelFs(fsType: String, busyboxBin: String): Boolean {
-    val fsArg = enumArg(fsType, ALLOWED_FS_TYPES)
+    val fsArg = ShellArg.of(fsType)
     if (RootShell.cmd(
             "grep",
             ShellArg.literal("-qw"),
@@ -64,7 +64,7 @@ fun doMount(
 
     val imgPath = pathArg(imagePath)
     val mp = pathArg(mountPoint)
-    val fsArg = enumArg(fsType.mountType, ALLOWED_FS_TYPES)
+    val fsArg = ShellArg.of(fsType.mountType)
     val optsArg = mountOptsArg(mountOpts)
     if (!checkKernelFs(fsType.mountType, busyboxBin)) {
         Log.w(TAG, "kernel does not support ${fsType.mountType}")
@@ -260,8 +260,7 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): O
     return OpResult.success("permissions set")
 }
 
-// restore ownership (1000:1000) and permissions before unmount
-fun restorePermissions(mountPoint: String, busyboxBin: String): OpResult {
+fun setDefaultPermissions(mountPoint: String, busyboxBin: String): OpResult {
     Log.d(TAG, "restorePerms: $mountPoint")
     val mpArg = pathArg(mountPoint)
     val chown = RootShell.cmd(
@@ -271,9 +270,11 @@ fun restorePermissions(mountPoint: String, busyboxBin: String): OpResult {
         mpArg,
         busyboxBin = busyboxBin
     )
-    if (chown.exitCode != 0) Log.w(TAG, "chown failed: ${chown.output}")
+    if (chown.exitCode != 0) {
+        Log.w(TAG, "chown failed: ${chown.output}")
+        return OpResult.failure(Exception("Failed to restore ownership on $mountPoint"))
+    }
 
-    var failed = false
     listOf(Pair("d", "775"), Pair("f", "664")).forEach { (type, mode) ->
         val res = RootShell.cmd(
             "find",
@@ -289,12 +290,10 @@ fun restorePermissions(mountPoint: String, busyboxBin: String): OpResult {
         )
         if (res.exitCode != 0) {
             Log.w(TAG, "chmod restore ($type) failed: ${res.output}")
-            failed = true
+            return OpResult.failure(Exception("Failed to restore permissions ($type) on $mountPoint"))
         }
     }
-    return if (failed) OpResult.failure(Exception("Some permission restore operations failed")) else OpResult.success(
-        "permissions restored"
-    )
+    return OpResult.success("permissions restored")
 }
 
 fun failCleanup(mp: String, loop: String?, msg: String, busyboxBin: String): OpResult {

@@ -32,7 +32,7 @@ private val ALLOWED_BINARIES = setOf(
     "chcon",
     "find",
     // utilities
-    "busybox",
+    "busybox", // lol
     "dd",
     "hexdump",
     "blkid",
@@ -109,7 +109,7 @@ object RootShell {
     )
 
     @Volatile
-    private var resolvedSuPrefix: List<String>? = null
+    private var suPrefix: List<String>? = null
 
     fun cmd(
         command: ShellCmd,
@@ -158,8 +158,8 @@ object RootShell {
         return cmd(command, pipeInto, chain, orChain, redirectErr, ignoreError, suppressErr)
     }
 
-    private fun startSu(cmdLine: String): Process {
-        resolvedSuPrefix?.let { prefix ->
+    private fun startSuperuser(cmdLine: String): Process {
+        suPrefix?.let { prefix ->
             return ProcessBuilder(*(prefix + cmdLine).toTypedArray()).redirectErrorStream(true)
                 .start()
         }
@@ -171,7 +171,7 @@ object RootShell {
             val probeOut = probe.inputStream.bufferedReader().use { it.readText() }
             val probeCode = probe.waitFor()
             if (probeCode == 0 && probeOut.contains("uid=0")) {
-                resolvedSuPrefix = prefix
+                suPrefix = prefix
                 Log.i(TAG, "Resolved su prefix: ${prefix.joinToString(" ")}")
                 return ProcessBuilder(*(prefix + cmdLine).toTypedArray()).redirectErrorStream(true)
                     .start()
@@ -182,7 +182,7 @@ object RootShell {
 
     internal fun exec(cmdLine: String): ShellResult = try {
         fun execOnce(): ShellResult {
-            val p = startSu(cmdLine)
+            val p = startSuperuser(cmdLine)
             val output = p.inputStream.bufferedReader().use { reader ->
                 val buf = CharArray(8192)
                 val sb = StringBuilder()
@@ -202,14 +202,14 @@ object RootShell {
         }
 
         val first = execOnce()
-        if (resolvedSuPrefix != null && first.exitCode != 0) {
+        if (suPrefix != null && first.exitCode != 0) {
             val out = first.output.lowercase()
-            val looksLikeSuOptionError =
+            val suOptionError =
                 (out.contains("unknown option") || out.contains("invalid option") || out.contains("unrecognized option")) && (out.contains(
                     "su"
                 ) || out.contains("mount-master") || out.contains("-mm"))
-            if (looksLikeSuOptionError) {
-                resolvedSuPrefix = null
+            if (suOptionError) {
+                suPrefix = null
                 return execOnce()
             }
         }
