@@ -326,12 +326,8 @@ fun restorePermissions(
     busyboxBin: String,
 ): OpResult {
     val snapFile = File(snapshotFile)
-    if (!snapFile.exists()) {
-        Log.w(TAG, "restorePermissions: no snapshot, falling back to reset")
-        return resetPermissions(mountPoint, busyboxBin)
-    }
-    if (!preservePermissions) {
-        Log.d(TAG, "restorePermissions: preservePermissions=false, resetting permissions")
+    if (!snapFile.exists() || !preservePermissions) {
+        Log.w(TAG, "restorePermissions: resetting permissions (preservePermissions: $preservePermissions, hasSnapshot: ${snapFile.exists()})")
         return resetPermissions(mountPoint, busyboxBin)
     }
     val raw = runCatching { snapFile.readText() }.getOrElse {
@@ -398,7 +394,7 @@ fun restorePermissions(
 }
 
 fun resetPermissions(mountPoint: String, busyboxBin: String): OpResult {
-    Log.d(TAG, "resetPermissions: restoring permissions for: $mountPoint")
+    Log.d(TAG, "resetPermissions: resetting permissions for: $mountPoint")
     val mpArg = pathArg(mountPoint)
     val chown = RootShell.cmd(
         "chown",
@@ -451,3 +447,4 @@ fun failCleanup(mp: String, loop: String?, msg: String, busyboxBin: String): OpR
     RootShell.cmd("rmdir", pathArg(mp), ignoreError = true)
     return OpResult.failure(Exception(msg))
 }
+

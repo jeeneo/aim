@@ -3,6 +3,7 @@
 package org.codeberg.aimapp.utils.mounts
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -106,9 +107,16 @@ class MountManager(
     appContext: Context,
     private val onRootsChanged: (Context) -> Unit,
 ) {
+    companion object {
+        private const val TAG = "MountManager"
+        private const val REFRESH_COALESCE_MS = 300L
+    }
+
     private val ctx = appContext.applicationContext
     val mountsDir: String = File(ctx.filesDir, "mounts").apply { mkdirs() }.absolutePath
     private val mountMutex = Mutex()
+    private val refreshLock = Any()
+    private var lastRefreshMs = 0L
     private val maxMounts = 10
     private val _mountedImages = MutableStateFlow<List<MountedImage>>(emptyList())
     val mountedImages: StateFlow<List<MountedImage>> = _mountedImages.asStateFlow()
@@ -187,12 +195,10 @@ class MountManager(
             ignoreError = true
         )
         Log.d(TAG, "readMountedImages: exit=${r.exitCode}, blank=${r.output.isBlank()}")
-
         if (r.exitCode != 0 || r.output.isBlank()) {
             Log.d(TAG, "No mounts found under $mountsDir/")
             return emptyList()
         }
-
         return r.output.lineSequence().mapNotNull { line ->
             val p = line.trim().split(Regex("\\s+"))
             val device = p.getOrNull(0)
@@ -201,9 +207,7 @@ class MountManager(
             val fs = fsTypeStr?.let { FS_MAP[it] ?: FsType.OTHER(it) }
             when {
                 p.size < 3 -> Log.d(TAG, "SKIP (fields=${p.size}): $line").let { null }
-
                 fs == null -> Log.d(TAG, "SKIP (unknown fs '${null}'): $line").let { null }
-
                 device == null || "loop" !in device -> Log.d(
                     TAG, "SKIP (not loop, device=$device): $line"
                 ).let { null }
@@ -218,8 +222,16 @@ class MountManager(
             .also { Log.d(TAG, "Total mounted: ${it.size}") }
     }
 
-    fun refreshMountedImages() {
-        _mountedImages.value = readMountedImages()
+    fun refreshMountedImages(force: Boolean = false) {
+        synchronized(refreshLock) {
+            val now = SystemClock.elapsedRealtime()
+            if (!force && now - lastRefreshMs < REFRESH_COALESCE_MS) {
+                Log.d(TAG, "refreshMountedImages: coalesced")
+                return
+            }
+            _mountedImages.value = readMountedImages()
+            lastRefreshMs = SystemClock.elapsedRealtime()
+        }
     }
 
     suspend fun mountImage(
@@ -287,7 +299,7 @@ class MountManager(
             }
             if (mountedLoop != null) {
                 Log.w(TAG, "Image already mounted via $mountedLoop")
-                refreshMountedImages()
+                refreshMountedImages(force = true)
                 return fail(R.string.error_image_already_mounted)
             }
             loops.forEach { Log.w(TAG, "Stale loop $it, detaching"); detachLoop(it) }
@@ -377,7 +389,7 @@ class MountManager(
 
         RootShell.cmd("rmdir", mpArg, ignoreError = true)
         File(snapshotFile).delete()
-        refreshMountedImages()
+        refreshMountedImages(force = true)
         onRootsChanged(ctx)
         return MountResult.Unmounted(item.mountPoint)
     }
@@ -471,7 +483,7 @@ class MountManager(
     }
 
     private fun cleanupEmptyBindDir(bindDir: String) {
-        val rm = RootShell.cmd("rmdir", pathArg(bindDir), ignoreError = true)
+        val rm = RootShell.cmd("rmdir", pathArg(bindDir))
         if (rm.exitCode == 0) {
             Log.d(TAG, "Removed empty bind dir: $bindDir")
         }
@@ -535,7 +547,7 @@ class MountManager(
     ): MountResult {
         val mp = "$mountsDir/$stem"
         if (isMountedAt(mp)) {
-            refreshMountedImages()
+            refreshMountedImages(force = true)
             return MountResult.AlreadyMounted(mp)
         }
 
@@ -559,7 +571,7 @@ class MountManager(
                     Log.w(TAG, "makeAccessible failed for $mp: ${it.message}")
                 }
             }
-            refreshMountedImages()
+            refreshMountedImages(force = true)
             onRootsChanged(ctx)
             return MountResult.Mounted(mp)
         }
@@ -570,9 +582,5 @@ class MountManager(
             ctx.getString(
                 R.string.error_mount_failed_output, cause.ifBlank { "unknown" })
         )
-    }
-
-    companion object {
-        private const val TAG = "MountManager"
     }
 }
