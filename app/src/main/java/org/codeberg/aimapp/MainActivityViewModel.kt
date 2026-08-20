@@ -126,9 +126,6 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     )
     val bindDir: StateFlow<String> = _bindDir
 
-    private val _showSettingsConfirm = MutableStateFlow(false)
-    val showSettingsConfirm: StateFlow<Boolean> = _showSettingsConfirm
-
     private fun errorText(
         throwable: Throwable,
         fallback: String = app.getString(R.string.alert_environment_check_failed),
@@ -454,10 +451,6 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun applySettings() {
-        if (!settingsPrefs.getBoolean(KEY_SETTINGS_CONFIRMED, false)) {
-            _showSettingsConfirm.value = true
-            return
-        }
         viewModelScope.launch {
             withLockedUI {
                 val snapshot = _images.value
@@ -472,16 +465,6 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 else alert(Alert.Success(app.getString(R.string.alert_settings_applied_success)))
             }
         }
-    }
-
-    fun confirmSettingsDialog() {
-        settingsPrefs.edit { putBoolean(KEY_SETTINGS_CONFIRMED, true) }
-        _showSettingsConfirm.value = false
-        applySettings()
-    }
-
-    fun dismissSettingsDialog() {
-        _showSettingsConfirm.value = false
     }
 
     private suspend fun applyUnmounts(

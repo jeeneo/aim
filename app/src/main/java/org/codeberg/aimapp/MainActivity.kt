@@ -29,8 +29,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -40,7 +38,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -102,7 +99,6 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     val alerts by viewModel.alerts.collectAsState()
     val partitionState by viewModel.partitionPicker.collectAsState()
     val bindDir by viewModel.bindDir.collectAsState()
-    val showSettingsConfirm by viewModel.showSettingsConfirm.collectAsState()
     val pkgName = LocalContext.current.packageName
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -134,24 +130,6 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
             onConfirm = { newDir ->
                 viewModel.setBindDir(newDir)
                 showBindDirEdit = false
-            },
-        )
-    }
-
-    if (showSettingsConfirm) {
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissSettingsDialog() },
-            title = { Text(text = stringResource(R.string.posix_warning_header)) },
-            text = { Text(text = stringResource(R.string.posix_warning_body)) },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissSettingsDialog() }) {
-                    Text(text = stringResource(R.string.cancel))
-                }
-            },
-            confirmButton = {
-                Button(onClick = { viewModel.confirmSettingsDialog() }) {
-                    Text(text = stringResource(R.string.ok))
-                }
             },
         )
     }

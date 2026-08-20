@@ -336,8 +336,10 @@ class MountManager(
         val mpArg = pathArg(item.mountPoint)
 
         if (item.fsType.posixPermissions) {
-            setDefaultPermissions(item.mountPoint, busyboxBin).onFailure {
-                Log.w(TAG, "setDefaultPermissions failed for ${item.mountPoint}: ${it.message}")
+            val stem = item.mountPoint.removePrefix("$mountsDir/")
+            val snapshotFile = "$mountsDir/.$stem.perm"
+            restorePermissionsFromSnapshot(item.mountPoint, snapshotFile, item.fsType, busyboxBin).onFailure {
+                Log.w(TAG, "restorePermissionsFromSnapshot failed for ${item.mountPoint}: ${it.message}")
             }
         }
 
@@ -367,6 +369,7 @@ class MountManager(
         }
 
         RootShell.cmd("rmdir", mpArg, suppressErr = true, ignoreError = true)
+        File("$mountsDir/.${item.mountPoint.removePrefix("$mountsDir/")}.perm").delete()
         refreshMountedImages()
         onRootsChanged(ctx)
         return MountResult.Unmounted(item.mountPoint)
@@ -539,6 +542,10 @@ class MountManager(
                 return fail(R.string.error_mount_not_visible)
             }
             if (fsType.posixPermissions) {
+                val snapshotFile = "$mountsDir/.$stem.perm"
+                snapshotPermissions(mp, snapshotFile, busyboxBin).onFailure {
+                    Log.w(TAG, "snapshotPermissions failed for $mp: ${it.message}")
+                }
                 makeAccessible(mp, mountsDir, busyboxBin).onFailure {
                     Log.w(TAG, "makeAccessible failed for $mp: ${it.message}")
                 }

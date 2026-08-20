@@ -14,6 +14,7 @@ import org.codeberg.aimapp.utils.shell.mountOptsArg
 import org.codeberg.aimapp.utils.shell.numArg
 import org.codeberg.aimapp.utils.shell.pathArg
 import org.codeberg.aimapp.utils.shell.secontextArg
+import java.io.File
 
 private const val TAG = "MountOps"
 
@@ -102,8 +103,7 @@ fun doMount(
     }
 
     Log.d(
-        TAG,
-        if (isPartition) "using losetup with offset" else "direct failed, falling to losetup"
+        TAG, if (isPartition) "using losetup with offset" else "direct failed, falling to losetup"
     )
     var attachedLoop: String? = null
     var mountSucceeded = false
@@ -260,8 +260,130 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): O
     return OpResult.success("permissions set")
 }
 
-fun setDefaultPermissions(mountPoint: String, busyboxBin: String): OpResult {
-    Log.d(TAG, "restorePerms: $mountPoint")
+private val OCTAL_MODE = Regex("^[0-7]{3,4}$")
+internal data class PermEntry(val path: String, val uid: Int, val gid: Int, val mode: String)
+
+fun snapshotPermissions(mountPoint: String, snapshotFile: String, busyboxBin: String): OpResult {
+    val find = RootShell.cmd(
+        "find",
+        pathArg(mountPoint),
+        ShellArg.literal("-not"),
+        ShellArg.literal("-type"),
+        ShellArg.literal("l"),
+        ShellArg.literal("-exec"),
+        ShellArg.literal("stat"),
+        ShellArg.literal("-c"),
+        ShellArg.of("%n\t%u\t%g\t%a"),
+        ShellArg.literal("{}"),
+        ShellArg.literal("+"),
+        busyboxBin = busyboxBin,
+        redirectErr = true
+    )
+    if (find.exitCode != 0) {
+        Log.w(TAG, "snapshotPermissions: find/stat failed: ${find.output.take(200)}")
+        return OpResult.failure(Exception("Failed to snapshot permissions on $mountPoint"))
+    }
+    return try {
+        File(snapshotFile).apply { parentFile?.mkdirs() }.writeText(find.output)
+        Log.d(TAG, "snapshotPermissions: saved ${find.output.length} bytes to $snapshotFile")
+        OpResult.success(snapshotFile)
+    } catch (e: Exception) {
+        OpResult.failure(Exception("Failed to persist permission snapshot: ${e.message}"))
+    }
+}
+
+internal fun parseSnapshot(raw: String, mountPoint: String): List<PermEntry> {
+    val lines = raw.lines()
+    val entries = ArrayList<PermEntry>(lines.size)
+    for (rec in lines) {
+        if (rec.isBlank()) continue
+        val f = rec.split('\t')
+        val entry = if (f.size != 4) null else run {
+            val (path, uidStr, gidStr, mode) = f
+            val uid = uidStr.toIntOrNull() ?: return@run null
+            val gid = gidStr.toIntOrNull() ?: return@run null
+            if (!OCTAL_MODE.matches(mode)) return@run null
+            if (path != mountPoint && !isPathUnderMount(path, mountPoint)) return@run null
+            PermEntry(path, uid, gid, mode)
+        }
+        if (entry != null) entries.add(entry)
+    }
+    return entries
+}
+
+private fun isPathUnderMount(path: String, mountPoint: String): Boolean {
+    if (!path.startsWith("$mountPoint/")) return false
+    return path.substring(mountPoint.length + 1).split('/').none { it == ".." || it == "." }
+}
+
+fun restorePermissionsFromSnapshot(
+    mountPoint: String,
+    snapshotFile: String,
+    fsType: FsType,
+    busyboxBin: String,
+): OpResult {
+    if (!fsType.posixPermissions) return OpResult.success("skipped (non-POSIX filesystem)")
+
+    val snapFile = File(snapshotFile)
+    if (!snapFile.exists()) {
+        Log.w(TAG, "restorePermissionsFromSnapshot: no snapshot, falling back to reset")
+        return restorePermissions(mountPoint, busyboxBin)
+    }
+
+    val raw = runCatching { snapFile.readText() }.getOrElse {
+        return OpResult.failure(Exception("Failed to read permission snapshot: ${it.message}"))
+    }
+    val entries = parseSnapshot(raw, mountPoint)
+    if (entries.isEmpty()) return OpResult.success("nothing to restore")
+
+    val groups = entries.groupBy { Triple(it.uid, it.gid, it.mode) }
+    Log.d(TAG, "restore: ${entries.size} entries in ${groups.size} groups")
+
+    for ((key, group) in groups) {
+        val (uid, gid, mode) = key
+        val allPaths = group.map { it.path }
+        for (batch in allPaths.chunked(500)) {
+            val paths = batch.map { pathArg(it) }.toTypedArray()
+
+            val chown = RootShell.cmd(
+                "chown",
+                ShellArg.of("$uid:$gid"),
+                *paths,
+                busyboxBin = busyboxBin,
+                redirectErr = true
+            )
+            if (chown.exitCode != 0) {
+                return OpResult.failure(
+                    Exception(
+                        "Permission restore aborted at chown $uid:$gid: ${
+                            chown.output.take(
+                                200
+                            )
+                        }"
+                    )
+                )
+            }
+            val chmod = RootShell.cmd(
+                "chmod", ShellArg.of(mode), *paths, busyboxBin = busyboxBin, redirectErr = true
+            )
+            if (chmod.exitCode != 0) {
+                return OpResult.failure(
+                    Exception(
+                        "Permission restore aborted at chmod $mode: ${
+                            chmod.output.take(
+                                200
+                            )
+                        }"
+                    )
+                )
+            }
+        }
+    }
+    return OpResult.success("restored ${entries.size} entries in ${groups.size} groups")
+}
+
+fun restorePermissions(mountPoint: String, busyboxBin: String): OpResult {
+    Log.d(TAG, "restorePerms: restoring permissions for: $mountPoint")
     val mpArg = pathArg(mountPoint)
     val chown = RootShell.cmd(
         "chown",
@@ -293,6 +415,7 @@ fun setDefaultPermissions(mountPoint: String, busyboxBin: String): OpResult {
             return OpResult.failure(Exception("Failed to restore permissions ($type) on $mountPoint"))
         }
     }
+    Log.d(TAG, "restorePerms: restore done for $mountPoint")
     return OpResult.success("permissions restored")
 }
 

@@ -273,6 +273,19 @@ class ShellSecurityTest {
     }
 
     @Test
+    fun testRootShell_rejectsNonWhitelistedBinaryWithLiteralArgs() {
+        val result = RootShell.cmd("rm", ShellArg.literal("-rf"), ShellArg.literal("/"))
+        assertEquals(-1, result.exitCode)
+        assertTrue(result.output.contains("not allowed"))
+    }
+
+    @Test
+    fun testRootShell_binaryPathTraversalViaBasename_doesNotBypassAllowlist() {
+        val result = RootShell.cmd("/usr/bin/../../rm", ShellArg.literal("-rf"))
+        assertEquals(-1, result.exitCode)
+    }
+
+    @Test
     fun testRootShell_acceptsWhitelistedBinary() {
         val result = RootShell.cmd("echo", ShellArg.of("test"))
         assertFalse(result.output.contains("not allowed"))
