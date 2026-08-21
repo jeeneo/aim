@@ -98,14 +98,18 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         private const val KEY_SETTINGS_CONFIRMED = "settings_confirmed"
         private const val KEY_PRESERVE_PERMISSIONS_CONFIRMED = "preserve_permissions_confirmed"
     }
+
     private data class BindState(val bindDir: String, val directMount: Boolean)
+
     private val app: Application = application
     val mountManager = MountManager(application) { SAFImageProvider.notifyRootsChanged(it) }
+
     private data class MountState(
         val stem: String? = null,
         val partitionIndex: Int? = null,
         val bindState: BindState? = null,
     )
+
     private val mountRuntime = mutableMapOf<String, MountState>()
     private fun runtimeState(path: String): MountState = mountRuntime[path] ?: MountState()
     private fun updateState(
@@ -182,13 +186,30 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private fun loadImportedImages(): List<ImportedImage> = imageStore.load()
-
     private fun saveImportedImages(list: List<ImportedImage>) = imageStore.save(list)
-
-    private fun updateImportedImage(path: String, transform: (ImportedImage) -> ImportedImage) {
+    private fun updateImage(
+        path: String,
+        transform: (ImportedImage) -> ImportedImage,
+    ): ImportedImage? {
+        var updated: ImportedImage? = null
         saveImportedImages(loadImportedImages().map {
-            if (it.path == path) transform(it) else it
+            if (it.path == path) transform(it).also { t -> updated = t } else it
         })
+        return updated?.also { u ->
+            _images.update { list ->
+                list.map { info ->
+                    if (info.path != path) info else info.copy(
+                        displayName = u.displayName,
+                        exposeInSAF = u.exposeInSAF,
+                        exposeInStorage = u.exposeInStorage,
+                        selectedPartitionIndex = u.selectedPartitionIndex,
+                        hasPartitions = u.hasPartitions,
+                        bindDir = u.bindDir,
+                        preservePermissions = u.preservePermissions,
+                    )
+                }
+            }
+        }
     }
 
     private suspend fun refreshAndRebuild(notifySaf: Boolean = false) {
@@ -438,25 +459,16 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun toggleImageSafExpose(path: String, expose: Boolean) {
-        updateImportedImage(path) { it.copy(exposeInSAF = expose) }
-        _images.update { list ->
-            list.map { if (it.path == path) it.copy(exposeInSAF = expose) else it }
-        }
+        updateImage(path) { it.copy(exposeInSAF = expose) }
     }
 
     fun toggleImageStorageExpose(path: String, expose: Boolean) {
-        updateImportedImage(path) { it.copy(exposeInStorage = expose) }
-        _images.update { list ->
-            list.map { if (it.path == path) it.copy(exposeInStorage = expose) else it }
-        }
+        updateImage(path) { it.copy(exposeInStorage = expose) }
     }
 
     fun toggleImagePreservePermissions(path: String, preserve: Boolean) {
         if (!preserve) {
-            updateImportedImage(path) { it.copy(preservePermissions = false) }
-            _images.update { list ->
-                list.map { if (it.path == path) it.copy(preservePermissions = false) else it }
-            }
+            updateImage(path) { it.copy(preservePermissions = false) }
             return
         }
         if (!settingsPrefs.getBoolean(KEY_PRESERVE_PERMISSIONS_CONFIRMED, false)) {
@@ -464,20 +476,14 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             _showPreservePermissionsConfirm.value = true
             return
         }
-        updateImportedImage(path) { it.copy(preservePermissions = true) }
-        _images.update { list ->
-            list.map { if (it.path == path) it.copy(preservePermissions = true) else it }
-        }
+        updateImage(path) { it.copy(preservePermissions = true) }
     }
 
     fun confirmPreservePermissionsDialog() {
         settingsPrefs.edit { putBoolean(KEY_PRESERVE_PERMISSIONS_CONFIRMED, true) }
         _showPreservePermissionsConfirm.value = false
         pendingPreservePermissionsPath?.let { path ->
-            updateImportedImage(path) { it.copy(preservePermissions = true) }
-            _images.update { list ->
-                list.map { if (it.path == path) it.copy(preservePermissions = true) else it }
-            }
+            updateImage(path) { it.copy(preservePermissions = true) }
         }
         pendingPreservePermissionsPath = null
     }
@@ -497,10 +503,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 return
             }
         }
-        updateImportedImage(path) { it.copy(bindDir = validatedDir) }
-        _images.update { list ->
-            list.map { if (it.path == path) it.copy(bindDir = validatedDir) else it }
-        }
+        updateImage(path) { it.copy(bindDir = validatedDir) }
         if (validatedDir != null) {
             alert(Alert.Info(app.getString(R.string.alert_custom_bind_dir_set)))
         } else {
@@ -589,7 +592,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
 
                 is MountResult.PartitionedImage -> {
                     if (imported?.hasPartitions != true) {
-                        updateImportedImage(img.path) {
+                        updateImage(img.path) {
                             it.copy(hasPartitions = true, selectedPartitionIndex = null)
                         }
                     }
@@ -599,9 +602,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 is MountResult.Failure -> {
                     Log.e(TAG, "Mount failed: ${img.path}")
                     errors += app.getString(
-                        R.string.error_op_mount,
-                        img.displayName,
-                        errorText(result.message)
+                        R.string.error_op_mount, img.displayName, errorText(result.message)
                     )
                 }
             }
@@ -649,7 +650,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
 
                 is MountResult.PartitionedImage -> {
                     if (imported?.hasPartitions != true) {
-                        updateImportedImage(img.path) {
+                        updateImage(img.path) {
                             it.copy(hasPartitions = true, selectedPartitionIndex = null)
                         }
                     }
@@ -659,9 +660,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 is MountResult.Failure -> {
                     Log.e(TAG, "Remount failed: ${img.path}")
                     errors += app.getString(
-                        R.string.error_op_remount,
-                        img.displayName,
-                        errorText(result.message)
+                        R.string.error_op_remount, img.displayName, errorText(result.message)
                     )
                 }
             }
@@ -708,9 +707,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     is BindResult.Failure -> {
                         Log.e(TAG, "Bind create failed: ${img.path}")
                         errors += app.getString(
-                            R.string.error_op_bind,
-                            img.displayName,
-                            errorText(bindRes.message)
+                            R.string.error_op_bind, img.displayName, errorText(bindRes.message)
                         )
                     }
 
@@ -781,8 +778,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 }
                 result.onSuccess { msg ->
                     alert(Alert.Success(msg))
-                    // clear partition flags since formatting removes the partition table
-                    updateImportedImage(path) {
+                    updateImage(path) {
                         it.copy(
                             hasPartitions = false, selectedPartitionIndex = null, diskLabel = null
                         )
@@ -820,7 +816,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private fun savePartitionSelection(imagePath: String, partition: PartitionEntry) {
-        updateImportedImage(imagePath) {
+        updateImage(imagePath) {
             it.copy(
                 selectedPartitionIndex = partition.index, diskLabel = partition.label
             )
@@ -853,8 +849,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     val fileSize = withContext(Dispatchers.IO) { File(path).length() }
                     val detectedFs = try {
                         withContext(Dispatchers.IO) {
-                            when (val d =
-                                detectFilesystem(app, path)) {
+                            when (val d = detectFilesystem(app, path)) {
                                 is DetectFsResult.Found -> d.fs
                                 is DetectFsResult.Unknown -> null
                                 is DetectFsResult.AccessError -> {
@@ -904,7 +899,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     ): MountResult {
         val pr = mountManager.probePartitions(path)
         if (pr == null) {
-            updateImportedImage(path) {
+            updateImage(path) {
                 it.copy(
                     hasPartitions = false, selectedPartitionIndex = null, diskLabel = null
                 )
