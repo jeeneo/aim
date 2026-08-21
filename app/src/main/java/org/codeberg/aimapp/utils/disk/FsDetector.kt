@@ -57,7 +57,9 @@ fun hexProbe(imagePath: String, skip: Int, count: Int, baseOffset: Long = 0): St
 }
 
 // FAT12/16/32
-fun detectFatVariant(probe: (Int, Int) -> String): String? {
+fun detectFatVariant(imagePath: String?, baseOffset: Long = 0L): String? {
+    if (imagePath == null) return null
+    val probe = { skip: Int, count: Int -> hexProbe(imagePath, skip, count, baseOffset) }
     val bytesPerSector = parseLeHexAt(probe(11, 2), byteCount = 2)
     val sectorsPerCluster = parseLeHexAt(probe(13, 1), byteCount = 1)
     val reservedSectors = parseLeHexAt(probe(14, 2), byteCount = 2)

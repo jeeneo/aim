@@ -65,7 +65,7 @@
     <string name="partition_bar_label">P%d</string>
     <string name="partition_type_unknown">Unknown</string>
     <string name="partition_type_unknown_hex">Unknown (0x%s)</string>
-    <string name="image_type_image">Image</string>
+    <string name="image_type_raw">raw</string>
     <string name="env_not_checked">Not checked</string>
     <string name="env_root_denied">Root access denied</string>
     <string name="env_busybox_skipped">Busybox: skipped (no root)</string>
@@ -83,8 +83,8 @@
     <string name="error_image_not_found">Image not found: %s</string>
     <string name="error_image_path_invalid_chars">Image path contains invalid characters</string>
     <string name="error_sparse_not_supported">Sparse images not supported</string>
-    <string name="error_unsupported_filesystem">Unsupported or unrecognised filesystem (expected ext4, FAT32, exFAT, ISO9660).</string>
-    <string name="error_no_fs_on_partition">No supported filesystem detected on partition %d</string>
+    <string name="error_unsupported_filesystem">unsupported or unrecognised filesystem (expected something like EXT4, FAT12/16/32, exFAT)</string>
+    <string name="error_no_fs_on_partition">no supported filesystem detected on partition %d</string>
     <string name="error_image_already_mounted">This image is already mounted</string>
     <string name="error_invalid_mount_point">Invalid mount point</string>
     <string name="error_path_invalid_chars">Path contains invalid characters</string>

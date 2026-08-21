@@ -75,14 +75,19 @@ data class PartitionEntry(
 
 enum class PartitionScheme { MBR, GPT }
 
-fun fsDisplayName(ctx: Context, fs: FsType?, probe: ((Int, Int) -> String)? = null): String =
+fun fsDisplayName(
+    ctx: Context,
+    fs: FsType?,
+    imagePath: String? = null,
+    baseOffset: Long = 0L,
+): String =
     when (fs) {
         FsType.EXT4 -> "ext4"
-        FsType.VFAT -> (probe?.let { detectFatVariant(it) }) ?: "FAT"
+        FsType.VFAT -> detectFatVariant(imagePath, baseOffset) ?: "FAT"
         FsType.EXFAT -> "exFAT"
         FsType.ISO9660 -> "ISO9660"
         is FsType.OTHER -> fs.name
-        null -> ctx.getString(R.string.image_type_image)
+        null -> ctx.getString(R.string.image_type_raw)
     }
 
 data class PartitionTableInfo(
@@ -150,7 +155,7 @@ fun probePartitionFilesystems(
                 ?: part.label
         val label = labelToMountStem(rawLabel)
         if (detected != null) {
-            val typeName = fsDisplayName(ctx, detected, ::probe)
+            val typeName = fsDisplayName(ctx, detected, imagePath, offset)
             Log.d(
                 TAG,
                 "P${part.index}: ${detected.mountType}" + if (label != null) " label='$label'" else ""

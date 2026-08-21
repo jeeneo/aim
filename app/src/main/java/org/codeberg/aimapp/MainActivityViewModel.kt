@@ -865,7 +865,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                         index = 1,
                         bootable = false,
                         typeId = 0,
-                        typeName = fsDisplayName(app, detectedFs),
+                        typeName = fsDisplayName(app, detectedFs, path),
                         startLBA = 0L,
                         sizeSectors = if (fileSize > 0) fileSize / 512 else 0L,
                         offsetBytes = 0L,
