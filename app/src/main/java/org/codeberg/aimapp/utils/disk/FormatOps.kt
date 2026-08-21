@@ -13,6 +13,7 @@ import org.codeberg.aimapp.utils.shell.ShellArg
 import org.codeberg.aimapp.utils.shell.ShellCmd
 import org.codeberg.aimapp.utils.shell.ShellResult
 import org.codeberg.aimapp.utils.shell.pathArg
+import org.codeberg.aimapp.utils.shell.resolvedBusyboxPath
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -31,7 +32,7 @@ private val FORMAT_ALLOWED_PREFIXES = listOf(
 
 // format an image, must NOT be mounted
 fun formatImage(
-    ctx: Context, path: String, ready: Boolean, busyboxBin: String, fsType: String = "ext4"
+    ctx: Context, path: String, ready: Boolean, fsType: String = "ext4"
 ): OpResult {
     if (!ready) return OpResult.failure(Exception(ctx.getString(R.string.error_env_not_ready)))
     val imagePath = path.trim()
@@ -81,7 +82,6 @@ fun formatImage(
     val losetupCheck = RootShell.cmd(
         "losetup",
         ShellArg.literal("-a"),
-        busyboxBin = busyboxBin,
         ignoreError = true,
         pipeInto = ShellCmd.of("grep", ShellArg.literal("-F"), imgArg)
     )
@@ -89,8 +89,8 @@ fun formatImage(
         Exception(ctx.getString(R.string.error_image_mounted_unmount_first))
     )
     val r = when (fsType.lowercase()) {
-        "ext4" -> formatExt4(ctx, canonical, imgArg, busyboxBin)
-        "exfat" -> formatExfat(ctx, canonical, imgArg, busyboxBin)
+        "ext4" -> formatExt4(ctx, canonical, imgArg)
+        "exfat" -> formatExfat(ctx, canonical, imgArg)
         else -> return OpResult.failure(
             Exception(
                 ctx.getString(
@@ -114,14 +114,13 @@ private fun runMkfs(
     ctx: Context,
     canonical: String,
     imgArg: ShellArg,
-    busyboxBin: String,
     fsLabel: String,
     applet: String,
     notFoundMsg: String,
     mkfsArgs: List<ShellArg>,
     names: List<String>,
 ): ShellResult {
-    val mkfs = findBinary(busyboxBin, *names.toTypedArray()) ?: return ShellResult(-1, notFoundMsg)
+    val mkfs = findBinary(*names.toTypedArray()) ?: return ShellResult(-1, notFoundMsg)
     Log.d(
         TAG,
         "Formatting $canonical as $fsLabel with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})"
@@ -129,7 +128,7 @@ private fun runMkfs(
     return if (mkfs.isBusyboxApplet) {
         RootShell.cmd(
             applet, *mkfsArgs.toTypedArray(), imgArg,
-            busyboxBin = busyboxBin, redirectErr = true
+            redirectErr = true
         )
     } else {
         RootShell.cmd(mkfs.path, *mkfsArgs.toTypedArray(), imgArg, redirectErr = true)
@@ -137,9 +136,9 @@ private fun runMkfs(
 }
 
 private fun formatExt4(
-    ctx: Context, canonical: String, imgArg: ShellArg, busyboxBin: String
+    ctx: Context, canonical: String, imgArg: ShellArg
 ): ShellResult = runMkfs(
-    ctx, canonical, imgArg, busyboxBin,
+    ctx, canonical, imgArg,
     fsLabel = "ext4",
     applet = "mkfs.ext4",
     notFoundMsg = ctx.getString(R.string.error_no_mke2fs),
@@ -148,9 +147,9 @@ private fun formatExt4(
 )
 
 private fun formatExfat(
-    ctx: Context, canonical: String, imgArg: ShellArg, busyboxBin: String
+    ctx: Context, canonical: String, imgArg: ShellArg
 ): ShellResult = runMkfs(
-    ctx, canonical, imgArg, busyboxBin,
+    ctx, canonical, imgArg,
     fsLabel = "exfat",
     applet = "mkfs.exfat",
     notFoundMsg = ctx.getString(R.string.error_no_mkexfat),
@@ -158,7 +157,7 @@ private fun formatExfat(
     names = listOf("mkfs.exfat", "mkexfatfs")
 )
 
-private fun findBinary(busyboxBin: String, vararg names: String): MkfsLocation? {
+private fun findBinary(vararg names: String): MkfsLocation? {
     val candidates = names.flatMap { listOf("/system/bin/$it", it) }
     for (c in candidates) {
         val r = RootShell.cmd(
@@ -170,15 +169,14 @@ private fun findBinary(busyboxBin: String, vararg names: String): MkfsLocation? 
         if (r.exitCode == 0) return MkfsLocation(c, isBusyboxApplet = false)
     }
     val busyboxTest = names.firstOrNull { it.startsWith("mkfs.") } ?: names.firstOrNull()
-    if (!busyboxTest.isNullOrEmpty() && busyboxBin.isNotEmpty()) {
+    if (!busyboxTest.isNullOrEmpty() && resolvedBusyboxPath.isNotEmpty()) {
         val r = RootShell.cmd(
             busyboxTest,
             ShellArg.literal("-V"),
-            busyboxBin = busyboxBin,
             redirectErr = true,
             pipeInto = ShellCmd.of("head", ShellArg.literal("-1"))
         )
-        if (r.exitCode == 0) return MkfsLocation(busyboxBin, isBusyboxApplet = true)
+        if (r.exitCode == 0) return MkfsLocation(resolvedBusyboxPath, isBusyboxApplet = true)
     }
     return null
 }

@@ -14,6 +14,7 @@ import org.codeberg.aimapp.utils.shell.loopDevArg
 import org.codeberg.aimapp.utils.shell.mountOptsArg
 import org.codeberg.aimapp.utils.shell.numArg
 import org.codeberg.aimapp.utils.shell.pathArg
+import org.codeberg.aimapp.utils.shell.resolvedBusyboxPath
 import org.codeberg.aimapp.utils.shell.secontextArg
 import java.io.File
 
@@ -35,14 +36,13 @@ fun buildMountOpts(fsType: FsType, mode: MountMode): String {
     }
 }
 
-private fun checkKernelFs(fsType: String, busyboxBin: String): Boolean {
+private fun checkKernelFs(fsType: String): Boolean {
     val fsArg = ShellArg.of(fsType)
     if (RootShell.cmd(
             "grep",
             ShellArg.literal("-qw"),
             fsArg,
-            pathArg("/proc/filesystems"),
-            busyboxBin = busyboxBin
+            pathArg("/proc/filesystems")
         ).exitCode == 0
     ) return true
     Log.d(TAG, "$fsType not in /proc/filesystems")
@@ -55,7 +55,6 @@ fun doMount(
     mountPoint: String,
     fsType: FsType,
     mountOpts: String,
-    busyboxBin: String,
     partOffset: Long = 0
 ): OpResult {
     val isPartition = partOffset > 0
@@ -68,7 +67,7 @@ fun doMount(
     val mp = pathArg(mountPoint)
     val fsArg = ShellArg.of(fsType.mountType)
     val optsArg = mountOptsArg(mountOpts)
-    if (!checkKernelFs(fsType.mountType, busyboxBin)) {
+    if (!checkKernelFs(fsType.mountType)) {
         Log.w(TAG, "kernel does not support ${fsType.mountType}")
         return OpResult.failure(
             Exception(
@@ -96,7 +95,6 @@ fun doMount(
             loopOpts,
             imgPath,
             mp,
-            busyboxBin = busyboxBin,
             redirectErr = true
         )
         Log.d(TAG, "direct: exit=${direct.exitCode}, out=${direct.output}")
@@ -113,7 +111,7 @@ fun doMount(
     val hasSystemLosetup =
         RootShell.cmd("test", ShellArg.literal("-x"), pathArg("/system/bin/losetup")).exitCode == 0
     if (!hasSystemLosetup) Log.d(TAG, "system losetup not found, falling back to busybox")
-    val loopTool = if (hasSystemLosetup) "" else busyboxBin
+    val loopTool = if (hasSystemLosetup) "" else resolvedBusyboxPath
     try {
         val findFree = RootShell.cmd(
             "losetup", ShellArg.literal("-f"), busyboxBin = loopTool
@@ -122,8 +120,7 @@ fun doMount(
             ?.takeIf { it.matches(LOOP_DEV_REGEX) } ?: return failCleanup(
             mountPoint,
             null,
-            ctx.getString(R.string.error_no_free_loop, detailOrUnknown(findFree.output)),
-            busyboxBin
+            ctx.getString(R.string.error_no_free_loop, detailOrUnknown(findFree.output))
         )
         Log.d(TAG, "loop=$loopDev")
         attachedLoop = loopDev
@@ -141,7 +138,6 @@ fun doMount(
                     ShellArg.literal("b"),
                     numArg(7),
                     numArg(loopIdx),
-                    busyboxBin = busyboxBin,
                     ignoreError = true
                 )
             }
@@ -163,8 +159,7 @@ fun doMount(
         if (attach.exitCode != 0) return failCleanup(
             mountPoint,
             null,
-            ctx.getString(R.string.error_failed_attach_loop, detailOrUnknown(attach.output)),
-            busyboxBin
+            ctx.getString(R.string.error_failed_attach_loop, detailOrUnknown(attach.output))
         )
         Log.d(TAG, "mount: dev=$loopDev -> $mountPoint, fs=${fsType.mountType}")
         val mount = RootShell.cmd(
@@ -175,7 +170,6 @@ fun doMount(
             optsArg,
             loopArg,
             mp,
-            busyboxBin = busyboxBin,
             redirectErr = true
         )
         Log.d(TAG, "mount: exit=${mount.exitCode}, out=${mount.output.trim().take(200)}")
@@ -186,8 +180,7 @@ fun doMount(
             return failCleanup(
                 mountPoint,
                 loopDev,
-                ctx.getString(R.string.error_mount_failed_output, fullDetail),
-                busyboxBin
+                ctx.getString(R.string.error_mount_failed_output, fullDetail)
             )
         }
         mountSucceeded = true
@@ -209,7 +202,7 @@ fun doMount(
 }
 
 // chmod/chcon on POSIX mounts so the app process can access files
-fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): OpResult {
+fun makeAccessible(mountPoint: String, mountsDir: String): OpResult {
     Log.d(TAG, "makeAccessible: $mountPoint")
     val mpArg = pathArg(mountPoint)
     val mountsDirArg = pathArg(mountsDir)
@@ -217,7 +210,7 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): O
         "ls",
         ShellArg.literal("-dZ"),
         mountsDirArg,
-        pipeInto = ShellCmd.of("awk", ShellArg.of("{print $1}"), busyboxBin = busyboxBin)
+        pipeInto = ShellCmd.of("awk", ShellArg.of("{print $1}"))
     ).output.trim().takeIf { it.matches(Regex("^[a-zA-Z0-9_:,.]+$")) && ':' in it } ?: run {
         Log.w(TAG, "makeAccessible: could not parse SELinux context, using fallback")
         APP_DATA_SECONTEXT
@@ -232,8 +225,7 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): O
         ShellArg.literal("chmod"),
         enumArg("777", ALLOWED_CHMOD_MODES),
         ShellArg.literal("{}"),
-        ShellArg.literal("+"),
-        busyboxBin = busyboxBin
+        ShellArg.literal("+")
     )
     if (chmodDirs.exitCode != 0) {
         Log.w(TAG, "chmod (dirs) failed: ${chmodDirs.output}")
@@ -249,8 +241,7 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): O
         ShellArg.literal("chmod"),
         enumArg("664", ALLOWED_CHMOD_MODES),
         ShellArg.literal("{}"),
-        ShellArg.literal("+"),
-        busyboxBin = busyboxBin
+        ShellArg.literal("+")
     )
     if (chmodFiles.exitCode != 0) {
         Log.w(TAG, "chmod (files) failed: ${chmodFiles.output}")
@@ -262,7 +253,6 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): O
         ShellArg.literal("-Rh"),
         secontextArg(parentCtx),
         mpArg,
-        busyboxBin = busyboxBin,
         ignoreError = true
     )
     if (chcon.exitCode != 0) Log.w(TAG, "chcon failed: ${chcon.output}")
@@ -273,7 +263,7 @@ private val OCTAL_MODE = Regex("^[0-7]{3,4}$")
 
 internal data class PermEntry(val path: String, val uid: Int, val gid: Int, val mode: String)
 
-fun snapshotPermissions(mountPoint: String, snapshotFile: String, busyboxBin: String): OpResult {
+fun snapshotPermissions(mountPoint: String, snapshotFile: String): OpResult {
     val snapshotArg = ShellArg.of(snapshotFile)
     File(snapshotFile).apply { parentFile?.mkdirs() }
     val find = RootShell.cmd(
@@ -288,7 +278,6 @@ fun snapshotPermissions(mountPoint: String, snapshotFile: String, busyboxBin: St
         ShellArg.of("%n\t%u\t%g\t%a"),
         ShellArg.literal("{}"),
         ShellArg.literal("+"),
-        busyboxBin = busyboxBin,
         redirectErr = true,
         outputTo = snapshotArg.quoted
     )
@@ -339,7 +328,6 @@ fun restorePermissions(
     mountPoint: String,
     snapshotFile: String,
     preservePermissions: Boolean,
-    busyboxBin: String,
 ): OpResult {
     val snapFile = File(snapshotFile)
     if (!snapFile.exists() || !preservePermissions) {
@@ -347,7 +335,7 @@ fun restorePermissions(
             TAG,
             "restorePermissions: resetting permissions (preservePermissions: $preservePermissions, hasSnapshot: ${snapFile.exists()})"
         )
-        return resetPermissions(mountPoint, busyboxBin)
+        return resetPermissions(mountPoint)
     }
     val raw = runCatching { snapFile.readText() }.getOrElse {
         return OpResult.failure(Exception("Failed to read permission snapshot: ${it.message}"))
@@ -366,7 +354,6 @@ fun restorePermissions(
                 ShellArg.literal("-h"),
                 ShellArg.of("$uid:$gid"),
                 *paths,
-                busyboxBin = busyboxBin,
                 redirectErr = true
             )
             if (chown.exitCode != 0) {
@@ -393,7 +380,6 @@ fun restorePermissions(
                 ShellArg.of(mode),
                 ShellArg.literal("{}"),
                 ShellArg.literal("+"),
-                busyboxBin = busyboxBin,
                 redirectErr = true
             )
             if (chmod.exitCode != 0) {
@@ -412,15 +398,14 @@ fun restorePermissions(
     return OpResult.success("restored ${entries.size} entries in ${groups.size} groups")
 }
 
-fun resetPermissions(mountPoint: String, busyboxBin: String): OpResult {
+fun resetPermissions(mountPoint: String): OpResult {
     Log.d(TAG, "resetPermissions: resetting permissions for: $mountPoint")
     val mpArg = pathArg(mountPoint)
     val chown = RootShell.cmd(
         "chown",
         ShellArg.literal("-Rh"),
         ShellArg.literal(SYSTEM_OWNERSHIP),
-        mpArg,
-        busyboxBin = busyboxBin
+        mpArg
     )
     if (chown.exitCode != 0) {
         Log.w(TAG, "chown failed: ${chown.output}")
@@ -440,8 +425,7 @@ fun resetPermissions(mountPoint: String, busyboxBin: String): OpResult {
             ShellArg.literal("chmod"),
             enumArg(mode, ALLOWED_CHMOD_MODES),
             ShellArg.literal("{}"),
-            ShellArg.literal("+"),
-            busyboxBin = busyboxBin
+            ShellArg.literal("+")
         )
         if (res.exitCode != 0) {
             Log.w(TAG, "chmod restore ($type) failed: ${res.output}")
@@ -452,14 +436,13 @@ fun resetPermissions(mountPoint: String, busyboxBin: String): OpResult {
     return OpResult.success("permissions restored")
 }
 
-fun failCleanup(mp: String, loop: String?, msg: String, busyboxBin: String): OpResult {
+fun failCleanup(mp: String, loop: String?, msg: String): OpResult {
     Log.w(TAG, "failCleanup: $msg (loop=$loop, mp=$mp)")
     loop?.let { dev ->
         RootShell.cmd(
             "losetup",
             ShellArg.literal("-d"),
             loopDevArg(dev),
-            busyboxBin = busyboxBin,
             ignoreError = true
         )
     }

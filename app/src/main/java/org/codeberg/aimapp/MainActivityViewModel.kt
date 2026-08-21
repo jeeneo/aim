@@ -756,7 +756,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 }
                 val result = withContext(Dispatchers.IO) {
                     formatDiskImage(
-                        app, path, envStatus.value.ready, envStatus.value.busyboxPath, fsType
+                        app, path, envStatus.value.ready, fsType
                     )
                 }
                 result.onSuccess { msg ->
@@ -834,7 +834,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     val detectedFs = try {
                         withContext(Dispatchers.IO) {
                             when (val d =
-                                detectFilesystem(app, path, envStatus.value.busyboxPath)) {
+                                detectFilesystem(app, path)) {
                                 is DetectFsResult.Found -> d.fs
                                 is DetectFsResult.Unknown -> null
                                 is DetectFsResult.AccessError -> {

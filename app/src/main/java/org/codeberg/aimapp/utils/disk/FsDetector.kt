@@ -11,6 +11,7 @@ import org.codeberg.aimapp.utils.parseLeHexAt
 import org.codeberg.aimapp.utils.shell.RootShell
 import org.codeberg.aimapp.utils.shell.ShellArg
 import org.codeberg.aimapp.utils.shell.pathArg
+import org.codeberg.aimapp.utils.shell.resolvedBusyboxPath
 import java.io.File
 import java.io.RandomAccessFile
 
@@ -145,7 +146,7 @@ private fun tryBlkid(
     return found to summary
 }
 
-fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): DetectFsResult {
+fun detectFilesystem(ctx: Context, imagePath: String): DetectFsResult {
     val imgFile = File(imagePath)
     if (!imgFile.exists()) return DetectFsResult.AccessError("file does not exist")
     val imgArg = pathArg(imagePath)
@@ -164,7 +165,7 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): Detec
     // try system blkid first, then busybox's applet as fallback
     val attempts = buildList {
         add("")
-        if (busyboxBin.isNotEmpty()) add(busyboxBin)
+        if (resolvedBusyboxPath.isNotEmpty()) add(resolvedBusyboxPath)
     }
     for ((i, bb) in attempts.withIndex()) {
         val (found, summary) = tryBlkid(imgArg, bb, i + 1)

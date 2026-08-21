@@ -12,6 +12,7 @@ import org.codeberg.aimapp.utils.mounts.EnvironmentStatus
 import org.codeberg.aimapp.utils.shell.RootShell
 import org.codeberg.aimapp.utils.shell.ShellArg
 import org.codeberg.aimapp.utils.shell.pathArg
+import org.codeberg.aimapp.utils.shell.resolvedBusyboxPath
 
 private val BUSYBOX_CANDIDATES = listOf(
     "busybox", "/system/bin/busybox", "/system/xbin/busybox",
@@ -82,6 +83,7 @@ fun checkEnv(): EnvCheckResult {
         !rootOk -> EnvCheckResult.RootDenied
         busyboxPath == null -> EnvCheckResult.BusyboxNotFound
         else -> EnvCheckResult.Ready(busyboxPath).also {
+            resolvedBusyboxPath = busyboxPath
             val bbVersion =
                 RootShell.cmd(busyboxPath).output.lineSequence()
                     .firstOrNull()?.trim()

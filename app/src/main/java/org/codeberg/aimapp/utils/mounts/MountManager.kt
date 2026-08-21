@@ -125,8 +125,6 @@ class MountManager(
     private val _mountedImages = MutableStateFlow<List<MountedImage>>(emptyList())
     val mountedImages: StateFlow<List<MountedImage>> = _mountedImages.asStateFlow()
 
-    private val busyboxBin: String get() = envStatus.value.busyboxPath
-
     private fun fail(resId: Int, vararg args: Any) =
         MountResult.Failure(ctx.getString(resId, *args))
 
@@ -146,7 +144,6 @@ class MountManager(
         ShellArg.literal("-qF"),
         ShellArg.of(needle),
         pathArg(PROC_MOUNTS),
-        busyboxBin = busyboxBin
     ).exitCode == 0
 
     private fun isMountedAt(mountPoint: String): Boolean = isInProcMounts(" $mountPoint ")
@@ -156,7 +153,6 @@ class MountManager(
             "losetup",
             ShellArg.literal("-d"),
             loopDevArg(loopDevice),
-            busyboxBin = busyboxBin,
             ignoreError = true
         ).exitCode == 0
 
@@ -164,7 +160,6 @@ class MountManager(
         val r = RootShell.cmd(
             "losetup",
             ShellArg.literal("-a"),
-            busyboxBin = busyboxBin,
             ignoreError = true,
             pipeInto = ShellCmd.of("grep", ShellArg.literal("-F"), pathArg(imagePath))
         )
@@ -271,7 +266,7 @@ class MountManager(
         if (!isIso && isSparseImage(imagePath)) return fail(R.string.error_sparse_not_supported)
 
         val fsType = try {
-            when (val detect = detectFilesystem(ctx, imagePath, busyboxBin)) {
+            when (val detect = detectFilesystem(ctx, imagePath)) {
                 is DetectFsResult.Found -> detect.fs
                 is DetectFsResult.Unknown -> {
                     Log.w(TAG, "fs detection failed for $imagePath (${imageFile.length()} bytes)")
@@ -359,11 +354,11 @@ class MountManager(
         val mpArg = pathArg(item.mountPoint)
         Log.d(TAG, "Unmounting ${item.mountPoint} (loop=${item.loopDevice})")
         RootShell.cmd(
-            "fuser", ShellArg.literal("-km"), mpArg, busyboxBin = busyboxBin, ignoreError = true
+            "fuser", ShellArg.literal("-km"), mpArg, ignoreError = true
         )
         if (item.fsType.posixPermissions) {
             restorePermissions(
-                item.mountPoint, snapshotFile, preservePermissions, busyboxBin
+                item.mountPoint, snapshotFile, preservePermissions
             ).onFailure {
                 Log.w(
                     TAG,
@@ -375,7 +370,7 @@ class MountManager(
         }
 
         val umountOk = RootShell.cmd(
-            "umount", mpArg, busyboxBin = busyboxBin
+            "umount", mpArg
         ).exitCode == 0 || RootShell.cmd("umount", mpArg).exitCode == 0
         if (!umountOk) {
             Log.e(TAG, "Failed to unmount ${item.mountPoint}")
@@ -530,7 +525,7 @@ class MountManager(
         }
 
         val opts = buildMountOpts(fsType, mode)
-        val result = doMount(ctx, imagePath, mp, fsType, opts, busyboxBin, partOffset)
+        val result = doMount(ctx, imagePath, mp, fsType, opts, partOffset)
 
         if (result.isSuccess) {
             if (!isMountedAt(mp)) {
@@ -541,11 +536,11 @@ class MountManager(
             if (fsType.posixPermissions) {
                 if (preservePermissions) {
                     val snapshotFile = "$mountsDir/.$stem.perm"
-                    snapshotPermissions(mp, snapshotFile, busyboxBin).onFailure {
+                    snapshotPermissions(mp, snapshotFile).onFailure {
                         Log.w(TAG, "snapshotPermissions failed for $mp: ${it.message}")
                     }
                 }
-                makeAccessible(mp, mountsDir, busyboxBin).onFailure {
+                makeAccessible(mp, mountsDir).onFailure {
                     Log.w(TAG, "makeAccessible failed for $mp: ${it.message}")
                 }
             }

@@ -9,6 +9,9 @@ data class ShellResult(val exitCode: Int, val output: String) {
     val isSuccess get() = exitCode == 0
 }
 
+@Volatile
+var resolvedBusyboxPath: String = ""
+
 class ShellArg private constructor(val quoted: String) {
     companion object {
         fun of(validated: String): ShellArg = ShellArg("'" + validated.replace("'", "'\\''") + "'")
@@ -42,7 +45,7 @@ class ShellCmd private constructor(internal val fragment: String) {
         fun of(
             binary: String,
             vararg args: ShellArg,
-            busyboxBin: String = "",
+            busyboxBin: String = resolvedBusyboxPath,
             stdinFrom: ShellArg? = null,
         ): ShellCmd {
             val resolved = resolveBinaryChecked(binary, busyboxBin)
@@ -112,7 +115,7 @@ object RootShell {
     fun cmd(
         binary: String,
         vararg args: ShellArg,
-        busyboxBin: String = "",
+        busyboxBin: String = resolvedBusyboxPath,
         pipeInto: ShellCmd? = null,
         chain: ShellCmd? = null,
         orChain: ShellCmd? = null,
