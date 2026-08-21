@@ -56,7 +56,7 @@ fun doMount(
     fsType: FsType,
     mountOpts: String,
     partOffset: Long = 0
-): OpResult {
+): Result<String> {
     val isPartition = partOffset > 0
     Log.d(
         TAG,
@@ -69,7 +69,7 @@ fun doMount(
     val optsArg = mountOptsArg(mountOpts)
     if (!checkKernelFs(fsType.mountType)) {
         Log.w(TAG, "kernel does not support ${fsType.mountType}")
-        return OpResult.failure(
+        return Result.failure(
             Exception(
                 ctx.getString(
                     R.string.error_kernel_no_fs, fsType.mountType
@@ -80,7 +80,7 @@ fun doMount(
 
     // mount points live under the app-owned mountsDir
     val mpDir = File(mountPoint)
-    if (!mpDir.isDirectory && !mpDir.mkdirs()) return OpResult.failure(
+    if (!mpDir.isDirectory && !mpDir.mkdirs()) return Result.failure(
         Exception(ctx.getString(R.string.error_failed_create_mount_point_dir, mountPoint))
     )
 
@@ -98,7 +98,7 @@ fun doMount(
             redirectErr = true
         )
         Log.d(TAG, "direct: exit=${direct.exitCode}, out=${direct.output}")
-        if (direct.exitCode == 0) return OpResult.success("Mounted at $mountPoint")
+        if (direct.exitCode == 0) return Result.success("Mounted at $mountPoint")
         directMountError = detailOrUnknown(direct.output)
         Log.d(TAG, "direct mount failed: $directMountError")
     }
@@ -184,7 +184,7 @@ fun doMount(
             )
         }
         mountSucceeded = true
-        return OpResult.success("Mounted at $mountPoint" + if (isPartition) " (partition at offset $partOffset)" else " using $loopDev")
+        return Result.success("Mounted at $mountPoint" + if (isPartition) " (partition at offset $partOffset)" else " using $loopDev")
     } finally {
         if (!mountSucceeded) {
             attachedLoop?.let { dev ->
@@ -202,7 +202,7 @@ fun doMount(
 }
 
 // chmod/chcon on POSIX mounts so the app process can access files
-fun makeAccessible(mountPoint: String, mountsDir: String): OpResult {
+fun makeAccessible(mountPoint: String, mountsDir: String): Result<String> {
     Log.d(TAG, "makeAccessible: $mountPoint")
     val mpArg = pathArg(mountPoint)
     val mountsDirArg = pathArg(mountsDir)
@@ -229,7 +229,7 @@ fun makeAccessible(mountPoint: String, mountsDir: String): OpResult {
     )
     if (chmodDirs.exitCode != 0) {
         Log.w(TAG, "chmod (dirs) failed: ${chmodDirs.output}")
-        return OpResult.failure(Exception("Failed to set directory permissions on $mountPoint"))
+        return Result.failure(Exception("Failed to set directory permissions on $mountPoint"))
     }
 
     val chmodFiles = RootShell.cmd(
@@ -245,7 +245,7 @@ fun makeAccessible(mountPoint: String, mountsDir: String): OpResult {
     )
     if (chmodFiles.exitCode != 0) {
         Log.w(TAG, "chmod (files) failed: ${chmodFiles.output}")
-        return OpResult.failure(Exception("Failed to set file permissions on $mountPoint"))
+        return Result.failure(Exception("Failed to set file permissions on $mountPoint"))
     }
 
     val chcon = RootShell.cmd(
@@ -256,14 +256,14 @@ fun makeAccessible(mountPoint: String, mountsDir: String): OpResult {
         ignoreError = true
     )
     if (chcon.exitCode != 0) Log.w(TAG, "chcon failed: ${chcon.output}")
-    return OpResult.success("permissions set")
+    return Result.success("permissions set")
 }
 
 private val OCTAL_MODE = Regex("^[0-7]{3,4}$")
 
 internal data class PermEntry(val path: String, val uid: Int, val gid: Int, val mode: String)
 
-fun snapshotPermissions(mountPoint: String, snapshotFile: String): OpResult {
+fun snapshotPermissions(mountPoint: String, snapshotFile: String): Result<String> {
     val snapshotArg = ShellArg.of(snapshotFile)
     File(snapshotFile).apply { parentFile?.mkdirs() }
     val find = RootShell.cmd(
@@ -283,7 +283,7 @@ fun snapshotPermissions(mountPoint: String, snapshotFile: String): OpResult {
     )
     if (find.exitCode != 0) {
         Log.w(TAG, "snapshotPermissions: find/stat failed: ${find.output.take(200)}")
-        return OpResult.failure(Exception("Failed to snapshot permissions on $mountPoint"))
+        return Result.failure(Exception("Failed to snapshot permissions on $mountPoint"))
     }
     // the snapshot lives in the app's own storage; count entries directly instead of wc -l
     val count = try {
@@ -294,10 +294,10 @@ fun snapshotPermissions(mountPoint: String, snapshotFile: String): OpResult {
     }
     if (count <= 0) {
         Log.w(TAG, "snapshotPermissions: snapshot empty/invalid at $snapshotFile")
-        return OpResult.failure(Exception("Failed to snapshot permissions on $mountPoint"))
+        return Result.failure(Exception("Failed to snapshot permissions on $mountPoint"))
     }
     Log.d(TAG, "snapshotPermissions: saved $count entries to $snapshotFile")
-    return OpResult.success(snapshotFile)
+    return Result.success(snapshotFile)
 }
 
 internal fun parseSnapshot(raw: String, mountPoint: String): List<PermEntry> {
@@ -328,7 +328,7 @@ fun restorePermissions(
     mountPoint: String,
     snapshotFile: String,
     preservePermissions: Boolean,
-): OpResult {
+): Result<String> {
     val snapFile = File(snapshotFile)
     if (!snapFile.exists() || !preservePermissions) {
         Log.w(
@@ -338,10 +338,10 @@ fun restorePermissions(
         return resetPermissions(mountPoint)
     }
     val raw = runCatching { snapFile.readText() }.getOrElse {
-        return OpResult.failure(Exception("Failed to read permission snapshot: ${it.message}"))
+        return Result.failure(Exception("Failed to read permission snapshot: ${it.message}"))
     }
     val entries = parseSnapshot(raw, mountPoint)
-    if (entries.isEmpty()) return OpResult.success("nothing to restore")
+    if (entries.isEmpty()) return Result.success("nothing to restore")
     val groups = entries.groupBy { Triple(it.uid, it.gid, it.mode) }
     Log.d(TAG, "restorePermissions: restoring ${entries.size} entries in ${groups.size} groups")
     for ((key, group) in groups) {
@@ -357,7 +357,7 @@ fun restorePermissions(
                 redirectErr = true
             )
             if (chown.exitCode != 0) {
-                return OpResult.failure(
+                return Result.failure(
                     Exception(
                         "Permission restore aborted at chown $uid:$gid: ${
                             chown.output.take(
@@ -383,7 +383,7 @@ fun restorePermissions(
                 redirectErr = true
             )
             if (chmod.exitCode != 0) {
-                return OpResult.failure(
+                return Result.failure(
                     Exception(
                         "Permission restore aborted at chmod $mode: ${
                             chmod.output.take(
@@ -395,10 +395,10 @@ fun restorePermissions(
             }
         }
     }
-    return OpResult.success("restored ${entries.size} entries in ${groups.size} groups")
+    return Result.success("restored ${entries.size} entries in ${groups.size} groups")
 }
 
-fun resetPermissions(mountPoint: String): OpResult {
+fun resetPermissions(mountPoint: String): Result<String> {
     Log.d(TAG, "resetPermissions: resetting permissions for: $mountPoint")
     val mpArg = pathArg(mountPoint)
     val chown = RootShell.cmd(
@@ -409,7 +409,7 @@ fun resetPermissions(mountPoint: String): OpResult {
     )
     if (chown.exitCode != 0) {
         Log.w(TAG, "chown failed: ${chown.output}")
-        return OpResult.failure(Exception("Failed to restore ownership on $mountPoint"))
+        return Result.failure(Exception("Failed to restore ownership on $mountPoint"))
     }
 
     listOf(Pair("d", DEFAULT_DIR_MODE), Pair("f", "664")).forEach { (type, mode) ->
@@ -429,14 +429,14 @@ fun resetPermissions(mountPoint: String): OpResult {
         )
         if (res.exitCode != 0) {
             Log.w(TAG, "chmod restore ($type) failed: ${res.output}")
-            return OpResult.failure(Exception("Failed to restore permissions ($type) on $mountPoint"))
+            return Result.failure(Exception("Failed to restore permissions ($type) on $mountPoint"))
         }
     }
     Log.d(TAG, "resetPermissions: restore done for $mountPoint")
-    return OpResult.success("permissions restored")
+    return Result.success("permissions restored")
 }
 
-fun failCleanup(mp: String, loop: String?, msg: String): OpResult {
+fun failCleanup(mp: String, loop: String?, msg: String): Result<String> {
     Log.w(TAG, "failCleanup: $msg (loop=$loop, mp=$mp)")
     loop?.let { dev ->
         RootShell.cmd(
@@ -447,6 +447,6 @@ fun failCleanup(mp: String, loop: String?, msg: String): OpResult {
         )
     }
     File(mp).delete() // rmdir semantics: only removes an empty dir
-    return OpResult.failure(Exception(msg))
+    return Result.failure(Exception(msg))
 }
 

@@ -68,19 +68,23 @@ data class EnvironmentStatus(
     val ready: Boolean = false,
 )
 
+interface OperationFailure {
+    val message: String
+}
+
 sealed class MountResult {
     data class Mounted(val mountPoint: String) : MountResult()
     data class AlreadyMounted(val mountPoint: String) : MountResult()
     data class Unmounted(val mountPoint: String) : MountResult()
     data class PartitionedImage(val result: PartitionedImageResult) : MountResult()
-    data class Failure(val message: String) : MountResult()
+    data class Failure(override val message: String) : MountResult(), OperationFailure
 }
 
 sealed class BindResult {
     data class Exposed(val target: String) : BindResult()
     data class AlreadyExposed(val target: String) : BindResult()
     data class Removed(val target: String) : BindResult()
-    data class Failure(val message: String) : BindResult()
+    data class Failure(override val message: String) : BindResult(), OperationFailure
     object Skipped : BindResult()
 }
 
@@ -131,8 +135,9 @@ class MountManager(
     private fun bindFail(resId: Int, vararg args: Any) =
         BindResult.Failure(ctx.getString(resId, *args))
 
-    private fun requireEnvReady(): MountResult.Failure? =
-        if (!envStatus.value.ready) fail(R.string.error_env_not_ready) else null
+    /** Returns the constructed failure if the environment is not ready, null otherwise. */
+    private fun <F> requireEnvReady(failure: (String) -> F): F? =
+        if (!envStatus.value.ready) failure(ctx.getString(R.string.error_env_not_ready)) else null
 
     private fun requireMountCapacity(): MountResult.Failure? =
         if (_mountedImages.value.size >= maxMounts) fail(
@@ -246,7 +251,7 @@ class MountManager(
         mountDirName: String? = null,
         preservePermissions: Boolean = false,
     ): MountResult = mountMutex.withLock {
-        requireEnvReady()?.let { return it }
+        requireEnvReady { MountResult.Failure(it) }?.let { return it }
         refreshMountedImages()
         requireMountCapacity()?.let { return it }
         val imagePath = path.trim()
@@ -318,7 +323,7 @@ class MountManager(
         mountDirName: String? = null,
         preservePermissions: Boolean = false,
     ): MountResult = mountMutex.withLock {
-        requireEnvReady()?.let { return it }
+        requireEnvReady { MountResult.Failure(it) }?.let { return it }
         refreshMountedImages()
         requireMountCapacity()?.let { return it }
 
@@ -393,7 +398,7 @@ class MountManager(
         bindDir: String? = null,
         directMount: Boolean = false,
     ): BindResult = mountMutex.withLock {
-        requireEnvReadyBind()?.let { return it }
+        requireEnvReady { BindResult.Failure(it) }?.let { return it }
         bindDir ?: return bindFail(R.string.error_bind_dir_not_specified)
         val bindmount = bindMountValidate(bindDir) ?: return bindFail(R.string.error_bind_dir_rejected)
         val safeStem = sanitizeStem(stem)
@@ -462,9 +467,6 @@ class MountManager(
             Log.d(TAG, "Removed empty bind dir: $bindDir")
         }
     }
-
-    private fun requireEnvReadyBind(): BindResult.Failure? =
-        if (!envStatus.value.ready) BindResult.Failure(ctx.getString(R.string.error_env_not_ready)) else null
 
     // sparse images cannot be loop-mounted easily
     private fun isSparseImage(imagePath: String): Boolean {
@@ -550,7 +552,7 @@ class MountManager(
         }
 
         Log.e(TAG, "doMount failed for $imagePath -> $mp: ${result.exceptionOrNull()?.message}")
-        val cause = result.exceptionOrNull()?.message ?: ""
+        val cause = result.exceptionOrNull()?.message.orEmpty()
         return MountResult.Failure(
             ctx.getString(
                 R.string.error_mount_failed_output, cause.ifBlank { "unknown" })

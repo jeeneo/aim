@@ -141,6 +141,11 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
             ?: throwable.javaClass.simpleName.takeIf { it.isNotBlank() } ?: fallback
     }
 
+    private fun errorText(
+        message: String?,
+        fallback: String = app.getString(R.string.alert_environment_check_failed),
+    ): String = message?.takeIf { it.isNotBlank() } ?: fallback
+
     fun setBindDir(dir: String) {
         val trimmed = dir.trim().trimEnd('/')
         if (trimmed.isBlank()) return
@@ -203,7 +208,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         }
         return when (result) {
             is MountResult.Failure -> errorText(
-                Exception(result.message), app.getString(R.string.error_unmount_failed)
+                result.message, app.getString(R.string.error_unmount_failed)
             )
 
             else -> null
@@ -583,7 +588,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     errors += app.getString(
                         R.string.error_op_mount,
                         img.displayName,
-                        errorText(Exception(result.message))
+                        errorText(result.message)
                     )
                 }
             }
@@ -643,7 +648,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     errors += app.getString(
                         R.string.error_op_remount,
                         img.displayName,
-                        errorText(Exception(result.message))
+                        errorText(result.message)
                     )
                 }
             }
@@ -690,7 +695,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                         errors += app.getString(
                             R.string.error_op_bind,
                             img.displayName,
-                            errorText(Exception(bindRes.message))
+                            errorText(bindRes.message)
                         )
                     }
 

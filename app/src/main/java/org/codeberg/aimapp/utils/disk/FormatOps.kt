@@ -6,7 +6,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import org.codeberg.aimapp.R
-import org.codeberg.aimapp.utils.mounts.OpResult
 import org.codeberg.aimapp.utils.paths.validatePath
 import org.codeberg.aimapp.utils.shell.RootShell
 import org.codeberg.aimapp.utils.shell.ShellArg
@@ -33,22 +32,22 @@ private val FORMAT_ALLOWED_PREFIXES = listOf(
 // format an image, must NOT be mounted
 fun formatImage(
     ctx: Context, path: String, ready: Boolean, fsType: String = "ext4"
-): OpResult {
-    if (!ready) return OpResult.failure(Exception(ctx.getString(R.string.error_env_not_ready)))
+): Result<String> {
+    if (!ready) return Result.failure(Exception(ctx.getString(R.string.error_env_not_ready)))
     val imagePath = path.trim()
     if (imagePath.isBlank() || !imagePath.endsWith(
             ".img", ignoreCase = true
         )
-    ) return OpResult.failure(Exception(ctx.getString(R.string.error_only_img_format_supported)))
+    ) return Result.failure(Exception(ctx.getString(R.string.error_only_img_format_supported)))
     if (imagePath.endsWith(
             ".iso", ignoreCase = true
         )
-    ) return OpResult.failure(Exception(ctx.getString(R.string.error_iso_read_only)))
-    if (!validatePath(imagePath)) return OpResult.failure(Exception(ctx.getString(R.string.error_path_invalid_chars)))
+    ) return Result.failure(Exception(ctx.getString(R.string.error_iso_read_only)))
+    if (!validatePath(imagePath)) return Result.failure(Exception(ctx.getString(R.string.error_path_invalid_chars)))
     val canonical = try {
         File(imagePath).canonicalPath
     } catch (e: Exception) {
-        return OpResult.failure(
+        return Result.failure(
             Exception(
                 ctx.getString(
                     R.string.error_resolve_image_path, e.message ?: ""
@@ -59,9 +58,9 @@ fun formatImage(
     if (!canonical.endsWith(
             ".img", ignoreCase = true
         )
-    ) return OpResult.failure(Exception(ctx.getString(R.string.error_resolved_not_img)))
-    if (!validatePath(canonical)) return OpResult.failure(Exception(ctx.getString(R.string.error_resolved_path_invalid_chars)))
-    if (FORMAT_ALLOWED_PREFIXES.none { canonical.startsWith(it) }) return OpResult.failure(
+    ) return Result.failure(Exception(ctx.getString(R.string.error_resolved_not_img)))
+    if (!validatePath(canonical)) return Result.failure(Exception(ctx.getString(R.string.error_resolved_path_invalid_chars)))
+    if (FORMAT_ALLOWED_PREFIXES.none { canonical.startsWith(it) }) return Result.failure(
         Exception(
             ctx.getString(
                 R.string.error_image_must_be_user_storage,
@@ -70,12 +69,12 @@ fun formatImage(
         )
     )
     val nioPath = Paths.get(canonical)
-    if (!Files.exists(nioPath) || !Files.isRegularFile(nioPath)) return OpResult.failure(
+    if (!Files.exists(nioPath) || !Files.isRegularFile(nioPath)) return Result.failure(
         Exception(
             ctx.getString(R.string.error_image_not_regular_file)
         )
     )
-    if (Files.isSymbolicLink(Paths.get(imagePath))) return OpResult.failure(
+    if (Files.isSymbolicLink(Paths.get(imagePath))) return Result.failure(
         Exception(ctx.getString(R.string.error_symlinks_not_allowed))
     )
     val imgArg = pathArg(canonical)
@@ -85,13 +84,13 @@ fun formatImage(
         ignoreError = true,
         pipeInto = ShellCmd.of("grep", ShellArg.literal("-F"), imgArg)
     )
-    if (losetupCheck.exitCode == 0 && losetupCheck.output.isNotBlank()) return OpResult.failure(
+    if (losetupCheck.exitCode == 0 && losetupCheck.output.isNotBlank()) return Result.failure(
         Exception(ctx.getString(R.string.error_image_mounted_unmount_first))
     )
     val r = when (fsType.lowercase()) {
         "ext4" -> formatExt4(ctx, canonical, imgArg)
         "exfat" -> formatExfat(ctx, canonical, imgArg)
-        else -> return OpResult.failure(
+        else -> return Result.failure(
             Exception(
                 ctx.getString(
                     R.string.error_unsupported_fs_type, fsType
@@ -99,13 +98,13 @@ fun formatImage(
             )
         )
     }
-    return if (r.exitCode == 0) OpResult.success(
+    return if (r.exitCode == 0) Result.success(
         ctx.getString(
             R.string.alert_format_success,
             fsType
         )
     )
-    else OpResult.failure(Exception(ctx.getString(R.string.error_format_failed_output, r.output)))
+    else Result.failure(Exception(ctx.getString(R.string.error_format_failed_output, r.output)))
 }
 
 // shared dispatcher: locate an mkfs tool (direct binaries first, then busybox applets)
