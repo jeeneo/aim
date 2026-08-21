@@ -108,48 +108,55 @@ fun formatImage(
     else OpResult.failure(Exception(ctx.getString(R.string.error_format_failed_output, r.output)))
 }
 
-private fun formatExt4(
-    ctx: Context, canonical: String, imgArg: ShellArg, busyboxBin: String
+// shared dispatcher: locate an mkfs tool (direct binaries first, then busybox applets)
+// and invoke it on [imgArg]
+private fun runMkfs(
+    ctx: Context,
+    canonical: String,
+    imgArg: ShellArg,
+    busyboxBin: String,
+    fsLabel: String,
+    applet: String,
+    notFoundMsg: String,
+    mkfsArgs: List<ShellArg>,
+    names: List<String>,
 ): ShellResult {
-    val mkfs = findBinary(busyboxBin, "mke2fs", "mkfs.ext4") ?: return ShellResult(
-        -1, ctx.getString(R.string.error_no_mke2fs)
+    val mkfs = findBinary(busyboxBin, *names.toTypedArray()) ?: return ShellResult(-1, notFoundMsg)
+    Log.d(
+        TAG,
+        "Formatting $canonical as $fsLabel with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})"
     )
-    Log.d(TAG, "Formatting $canonical as ext4 with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})")
     return if (mkfs.isBusyboxApplet) {
         RootShell.cmd(
-            "mkfs.ext4",
-            ShellArg.literal("-t"),
-            ShellArg.literal("ext4"),
-            ShellArg.literal("-F"),
-            imgArg,
-            busyboxBin = busyboxBin,
-            redirectErr = true
+            applet, *mkfsArgs.toTypedArray(), imgArg,
+            busyboxBin = busyboxBin, redirectErr = true
         )
     } else {
-        RootShell.cmd(
-            mkfs.path,
-            ShellArg.literal("-t"),
-            ShellArg.literal("ext4"),
-            ShellArg.literal("-F"),
-            imgArg,
-            redirectErr = true
-        )
+        RootShell.cmd(mkfs.path, *mkfsArgs.toTypedArray(), imgArg, redirectErr = true)
     }
 }
 
+private fun formatExt4(
+    ctx: Context, canonical: String, imgArg: ShellArg, busyboxBin: String
+): ShellResult = runMkfs(
+    ctx, canonical, imgArg, busyboxBin,
+    fsLabel = "ext4",
+    applet = "mkfs.ext4",
+    notFoundMsg = ctx.getString(R.string.error_no_mke2fs),
+    mkfsArgs = listOf(ShellArg.literal("-t"), ShellArg.literal("ext4"), ShellArg.literal("-F")),
+    names = listOf("mke2fs", "mkfs.ext4")
+)
+
 private fun formatExfat(
     ctx: Context, canonical: String, imgArg: ShellArg, busyboxBin: String
-): ShellResult {
-    val mkfs = findBinary(busyboxBin, "mkfs.exfat", "mkexfatfs") ?: return ShellResult(
-        -1, ctx.getString(R.string.error_no_mkexfat)
-    )
-    Log.d(TAG, "Formatting $canonical as exfat with ${mkfs.path} (busybox=${mkfs.isBusyboxApplet})")
-    return if (mkfs.isBusyboxApplet) {
-        RootShell.cmd("mkfs.exfat", imgArg, busyboxBin = busyboxBin, redirectErr = true)
-    } else {
-        RootShell.cmd(mkfs.path, imgArg, redirectErr = true)
-    }
-}
+): ShellResult = runMkfs(
+    ctx, canonical, imgArg, busyboxBin,
+    fsLabel = "exfat",
+    applet = "mkfs.exfat",
+    notFoundMsg = ctx.getString(R.string.error_no_mkexfat),
+    mkfsArgs = emptyList(),
+    names = listOf("mkfs.exfat", "mkexfatfs")
+)
 
 private fun findBinary(busyboxBin: String, vararg names: String): MkfsLocation? {
     val candidates = names.flatMap { listOf("/system/bin/$it", it) }

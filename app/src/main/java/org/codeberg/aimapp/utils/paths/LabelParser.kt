@@ -5,6 +5,7 @@ package org.codeberg.aimapp.utils.paths
 import android.util.Log
 import org.codeberg.aimapp.utils.disk.EXFAT_OEM_HEX
 import org.codeberg.aimapp.utils.mounts.FsType
+import org.codeberg.aimapp.utils.parseLeHexAt
 
 private const val TAG = "LabelParser"
 private const val MAX_LABEL_LENGTH = 64
@@ -142,9 +143,5 @@ private fun decodeHexAsUTF16LE(hex: String): String? {
 
 private fun parseL3U32Hex(hex: String): Long {
     require(hex.length >= 8) { "Need 8 hex chars, got ${hex.length}" }
-    val b0 = hex.take(2).toLong(16)
-    val b1 = hex.substring(2, 4).toLong(16)
-    val b2 = hex.substring(4, 6).toLong(16)
-    val b3 = hex.substring(6, 8).toLong(16)
-    return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
+    return parseLeHexAt(hex, byteCount = 4)
 }

@@ -12,6 +12,7 @@ import org.codeberg.aimapp.utils.disk.VALID_FAT_NFATS
 import org.codeberg.aimapp.utils.disk.detectFatVariant
 import org.codeberg.aimapp.utils.disk.hexProbe
 import org.codeberg.aimapp.utils.disk.probeFsMagic
+import org.codeberg.aimapp.utils.parseLeHexAt
 import org.codeberg.aimapp.utils.paths.labelToMountStem
 import org.codeberg.aimapp.utils.paths.probeLabel
 import java.io.File
@@ -194,8 +195,8 @@ private fun parseMBREntries(
         try {
             status = entry.take(2).toInt(16)
             typeId = entry.substring(8, 10).toInt(16)
-            startLBA = parseL3U32(entry, 16)
-            sizeSectors = parseL3U32(entry, 24)
+            startLBA = parseLeHexAt(entry, byteOffset = 8, byteCount = 4)
+            sizeSectors = parseLeHexAt(entry, byteOffset = 12, byteCount = 4)
         } catch (e: NumberFormatException) {
             Log.w(TAG, "Malformed partition entry $i: ${e.message}")
             continue
@@ -236,9 +237,9 @@ private fun parseGPTEntries(
         Log.w(TAG, "short GPT header read: ${headerFields.length} hex chars")
         return null
     }
-    val entriesStartLBA = parseL3U64(headerFields, 0)
-    val numEntries = parseL3U32(headerFields, 16).toInt()
-    val entrySize = parseL3U32(headerFields, 24).toInt()
+    val entriesStartLBA = parseLeHexAt(headerFields, byteCount = 8)
+    val numEntries = parseLeHexAt(headerFields, byteOffset = 8, byteCount = 4).toInt()
+    val entrySize = parseLeHexAt(headerFields, byteOffset = 12, byteCount = 4).toInt()
     if (entrySize !in 128..4096 || numEntries <= 0) {
         Log.w(TAG, "invalid GPT header: entrySize=$entrySize, numEntries=$numEntries")
         return null
@@ -259,8 +260,8 @@ private fun parseGPTEntries(
         if (base + 96 > rawHex.length) break
         val typeGuid = rawHex.substring(base, base + 32)
         if (typeGuid.all { it == '0' }) continue
-        val startLBA = parseL3U64(rawHex, base + 64)
-        val endLBA = parseL3U64(rawHex, base + 80)
+        val startLBA = parseLeHexAt(rawHex, i * entrySize + 32, byteCount = 8)
+        val endLBA = parseLeHexAt(rawHex, i * entrySize + 40, byteCount = 8)
         if (startLBA !in 1..endLBA) continue
         val sizeSectors = endLBA - startLBA + 1
         if (startLBA > Long.MAX_VALUE / 512 || sizeSectors > Long.MAX_VALUE / 512) {
@@ -301,23 +302,4 @@ private fun parseGPTName(hex: String, start: Int, end: Int): String? {
         i += 4
     }
     return sb.toString().trim().takeIf { it.isNotBlank() }
-}
-
-// parse a 4-byte little-endian unsigned integer from a hex string at the given hex-char offset
-private fun parseL3U32(hex: String, hexOffset: Int): Long {
-    val b0 = hex.substring(hexOffset, hexOffset + 2).toLong(16)
-    val b1 = hex.substring(hexOffset + 2, hexOffset + 4).toLong(16)
-    val b2 = hex.substring(hexOffset + 4, hexOffset + 6).toLong(16)
-    val b3 = hex.substring(hexOffset + 6, hexOffset + 8).toLong(16)
-    return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
-}
-
-// parse an 8-byte little-endian unsigned integer from a hex string at the given hex-char offset
-private fun parseL3U64(hex: String, hexOffset: Int): Long {
-    var result = 0L
-    for (i in 0 until 8) {
-        val byteVal = hex.substring(hexOffset + i * 2, hexOffset + i * 2 + 2).toLong(16)
-        result = result or (byteVal shl (i * 8))
-    }
-    return result
 }

@@ -21,10 +21,10 @@ import org.codeberg.aimapp.utils.paths.isValidLabelStem
 import org.codeberg.aimapp.utils.paths.sanitizeStem
 import org.codeberg.aimapp.utils.paths.validateBindDir
 import org.codeberg.aimapp.utils.paths.validatePath
+import org.codeberg.aimapp.utils.shell.LOOP_DEV_REGEX
 import org.codeberg.aimapp.utils.shell.RootShell
 import org.codeberg.aimapp.utils.shell.ShellArg
 import org.codeberg.aimapp.utils.shell.ShellCmd
-import org.codeberg.aimapp.utils.shell.LOOP_DEV_REGEX
 import org.codeberg.aimapp.utils.shell.enumArg
 import org.codeberg.aimapp.utils.shell.loopDevArg
 import org.codeberg.aimapp.utils.shell.pathArg
@@ -141,13 +141,15 @@ class MountManager(
             R.string.error_mount_limit_reached, maxMounts
         ) else null
 
-    private fun isMountedAt(mountPoint: String): Boolean = RootShell.cmd(
+    private fun isInProcMounts(needle: String): Boolean = RootShell.cmd(
         "grep",
         ShellArg.literal("-qF"),
-        ShellArg.of(" $mountPoint "),
+        ShellArg.of(needle),
         pathArg(PROC_MOUNTS),
         busyboxBin = busyboxBin
     ).exitCode == 0
+
+    private fun isMountedAt(mountPoint: String): Boolean = isInProcMounts(" $mountPoint ")
 
     private fun detachLoop(loopDevice: String): Boolean =
         RootShell.cmd(
@@ -173,13 +175,18 @@ class MountManager(
         }.distinct().toList()
     }
 
-    private fun isLoopMounted(loop: String): Boolean = RootShell.cmd(
-        "grep",
-        ShellArg.literal("-qF"),
-        ShellArg.of("$loop "),
-        pathArg(PROC_MOUNTS),
-        busyboxBin = busyboxBin
-    ).exitCode == 0
+    private fun isLoopMounted(loop: String): Boolean = isInProcMounts("$loop ")
+
+    /** mkdir -p [dir], then chown/chmod it for app access; true on success */
+    private fun createOwnedDir(dir: String): Boolean {
+        val arg = pathArg(dir)
+        return RootShell.cmd(
+            "mkdir", ShellArg.literal("-p"), arg, chain = ShellCmd.chain(
+                ShellCmd.of("chown", ShellArg.literal(MEDIA_RW_OWNERSHIP), arg),
+                ShellCmd.of("chmod", enumArg(DEFAULT_DIR_MODE, ALLOWED_CHMOD_MODES), arg)
+            )
+        ).exitCode == 0
+    }
 
     private fun detachStaleLoops(imagePath: String) {
         attachedLoops(imagePath).forEach { loop ->
@@ -397,16 +404,11 @@ class MountManager(
         val safeStem = sanitizeStem(stem)
         val source = "$mountsDir/$safeStem"
         val target = if (directMount) bindmount else "$bindmount/$safeStem"
-        if (!validatePath(source) || !validatePath(target) || !validatePath(bindmount)) return bindFail(R.string.error_path_invalid_chars)
-        val tgtArg = pathArg(target)
-        val dirArg = pathArg(bindmount)
-        val mkdirDir = RootShell.cmd(
-            "mkdir", ShellArg.literal("-p"), dirArg, chain = ShellCmd.chain(
-                ShellCmd.of("chown", ShellArg.literal(MEDIA_RW_OWNERSHIP), dirArg),
-                ShellCmd.of("chmod", enumArg(DEFAULT_DIR_MODE, ALLOWED_CHMOD_MODES), dirArg)
-            )
+        if (!validatePath(source) || !validatePath(target) || !validatePath(bindmount)) return bindFail(
+            R.string.error_path_invalid_chars
         )
-        if (mkdirDir.exitCode != 0) {
+        val tgtArg = pathArg(target)
+        if (!createOwnedDir(bindmount)) {
             Log.e(TAG, "Failed to create storage dir: $bindmount")
             return bindFail(R.string.error_failed_create_storage_dir, bindmount)
         }
@@ -417,13 +419,7 @@ class MountManager(
                 R.string.dialog_bind_nonempty, target
             )
         }
-        val mkdirTgt = RootShell.cmd(
-            "mkdir", ShellArg.literal("-p"), tgtArg, chain = ShellCmd.chain(
-                ShellCmd.of("chown", ShellArg.literal(MEDIA_RW_OWNERSHIP), tgtArg),
-                ShellCmd.of("chmod", enumArg(DEFAULT_DIR_MODE, ALLOWED_CHMOD_MODES), tgtArg)
-            )
-        )
-        if (mkdirTgt.exitCode != 0) {
+        if (!createOwnedDir(target)) {
             Log.e(TAG, "Failed to create mount point dir: $target")
             return bindFail(R.string.error_failed_create_mount_point_dir, target)
         }
@@ -452,7 +448,8 @@ class MountManager(
         directMount: Boolean = false,
     ): BindResult = mountMutex.withLock {
         bindDir ?: return BindResult.Skipped
-        val bindmount = bindMountValidate(bindDir) ?: return bindFail(R.string.error_bind_dir_rejected)
+        val bindmount =
+            bindMountValidate(bindDir) ?: return bindFail(R.string.error_bind_dir_rejected)
         val target = if (directMount) bindmount else "$bindmount/${sanitizeStem(stem)}"
         if (!validatePath(target)) return bindFail(R.string.error_path_invalid_chars)
         val tgtArg = pathArg(target)

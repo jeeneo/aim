@@ -7,6 +7,7 @@ import android.util.Log
 import org.codeberg.aimapp.utils.mounts.FsType
 import org.codeberg.aimapp.utils.mounts.PartitionTableInfo
 import org.codeberg.aimapp.utils.mounts.probePartitionTable
+import org.codeberg.aimapp.utils.parseLeHexAt
 import org.codeberg.aimapp.utils.shell.RootShell
 import org.codeberg.aimapp.utils.shell.ShellArg
 import org.codeberg.aimapp.utils.shell.pathArg
@@ -54,26 +55,18 @@ fun hexProbe(imagePath: String, skip: Int, count: Int, baseOffset: Long = 0): St
     }
 }
 
-// little-endian unsigned int from a hex string (2 hex chars per byte)
-private fun parseLEHex(hex: String): Long {
-    var result = 0L
-    for (i in hex.indices step 2) {
-        result = result or (hex.substring(i, i + 2).toLong(16) shl (i / 2 * 8))
-    }
-    return result
-}
-
 // FAT12/16/32
 fun detectFatVariant(probe: (Int, Int) -> String): String? {
-    val bytesPerSector = parseLEHex(probe(11, 2))
-    val sectorsPerCluster = parseLEHex(probe(13, 1))
-    val reservedSectors = parseLEHex(probe(14, 2))
-    val numFats = parseLEHex(probe(16, 1))
-    val rootEntryCount = parseLEHex(probe(17, 2))
-    val totalSectors16 = parseLEHex(probe(19, 2))
-    val fatSize16 = parseLEHex(probe(22, 2))
-    val totalSectors32 = parseLEHex(probe(32, 4))
-    val fatSize32 = parseLEHex(probe(36, 4)) // only meaningful past FAT16's BPB layout
+    val bytesPerSector = parseLeHexAt(probe(11, 2), byteCount = 2)
+    val sectorsPerCluster = parseLeHexAt(probe(13, 1), byteCount = 1)
+    val reservedSectors = parseLeHexAt(probe(14, 2), byteCount = 2)
+    val numFats = parseLeHexAt(probe(16, 1), byteCount = 1)
+    val rootEntryCount = parseLeHexAt(probe(17, 2), byteCount = 2)
+    val totalSectors16 = parseLeHexAt(probe(19, 2), byteCount = 2)
+    val fatSize16 = parseLeHexAt(probe(22, 2), byteCount = 2)
+    val totalSectors32 = parseLeHexAt(probe(32, 4), byteCount = 4)
+    val fatSize32 =
+        parseLeHexAt(probe(36, 4), byteCount = 4) // only meaningful past FAT16's BPB layout
 
     if (bytesPerSector == 0L || sectorsPerCluster == 0L) return null
     val rootDirSectors = ((rootEntryCount * 32) + (bytesPerSector - 1)) / bytesPerSector
@@ -97,8 +90,7 @@ fun probeFsMagic(probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALUE):
 }
 
 private fun detectFsByMagic(
-    probe: (Int, Int) -> String,
-    sizeBytes: Long = Long.MAX_VALUE
+    probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALUE
 ): FsType? {
     if (probe(1080, 2) == EXT4_MAGIC_HEX) return FsType.EXT4
     if (probe(510, 2) == FAT_SIG_HEX) {
@@ -128,8 +120,31 @@ sealed class DetectFsResult {
     data class AccessError(val reason: String, val exitCode: Int? = null) : DetectFsResult()
 }
 
-// returns a DetectFsResult: Found(FsType), Unknown, or AccessError when the image can't be read
-// throws PartitionedImageException if the image is a partitioned disk.
+private fun summarizeOutput(out: String, max: Int = 160) =
+    out.replace('\n', ' ').replace(Regex("\\s+"), " ").trim()
+        .let { if (it.length <= max) it else it.take(max) + "..." }
+
+private fun tryBlkid(
+    imgArg: ShellArg, busyboxBin: String, attemptNo: Int
+): Pair<DetectFsResult.Found?, String> {
+    val r = RootShell.cmd(
+        "blkid",
+        ShellArg.literal("-o"),
+        ShellArg.literal("value"),
+        ShellArg.literal("-s"),
+        ShellArg.literal("TYPE"),
+        imgArg,
+        busyboxBin = busyboxBin,
+        ignoreError = true
+    )
+    val norm = r.output.trim().lowercase()
+    val summary = "blkid #$attemptNo: code=${r.exitCode}, type='${summarizeOutput(norm)}'"
+    val found = if (r.exitCode == 0 && r.output.isNotBlank()) {
+        DetectFsResult.Found(FS_MAP[norm] ?: FsType.OTHER(norm))
+    } else null
+    return found to summary
+}
+
 fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): DetectFsResult {
     val imgFile = File(imagePath)
     if (!imgFile.exists()) return DetectFsResult.AccessError("file does not exist")
@@ -143,49 +158,19 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): Detec
     if (accessReason != null) {
         return DetectFsResult.AccessError(accessReason)
     }
-    fun summarize(out: String, max: Int = 160) =
-        out.replace('\n', ' ').replace(Regex("\\s+"), " ").trim()
-            .let { if (it.length <= max) it else it.take(max) + "..." }
     Log.d(TAG, "start for $imagePath")
     val blkidAttempts = mutableListOf<String>()
 
-    // blkid attempt 1: system blkid
-    run {
-        val r = RootShell.cmd(
-            "blkid",
-            ShellArg.literal("-o"),
-            ShellArg.literal("value"),
-            ShellArg.literal("-s"),
-            ShellArg.literal("TYPE"),
-            imgArg,
-            ignoreError = true
-        )
-        val norm = r.output.trim().lowercase()
-        blkidAttempts += "#1: code=${r.exitCode}, type='${summarize(norm)}'"
-        Log.d(TAG, "blkid 1 exit=${r.exitCode}, out=${summarize(norm)}")
-        if (r.exitCode == 0 && r.output.isNotBlank()) {
-            return DetectFsResult.Found(FS_MAP[norm] ?: FsType.OTHER(norm))
-        }
+    // try system blkid first, then busybox's applet as fallback
+    val attempts = buildList {
+        add("")
+        if (busyboxBin.isNotEmpty()) add(busyboxBin)
     }
-
-    // blkid attempt 2: busybox blkid
-    if (busyboxBin.isNotEmpty()) {
-        val r = RootShell.cmd(
-            "blkid",
-            ShellArg.literal("-o"),
-            ShellArg.literal("value"),
-            ShellArg.literal("-s"),
-            ShellArg.literal("TYPE"),
-            imgArg,
-            busyboxBin = busyboxBin,
-            ignoreError = true
-        )
-        val norm = r.output.trim().lowercase()
-        blkidAttempts += "#2: code=${r.exitCode}, type='${summarize(norm)}'"
-        Log.d(TAG, "blkid 2 exit=${r.exitCode}, out=${summarize(norm)}")
-        if (r.exitCode == 0 && r.output.isNotBlank()) {
-            return DetectFsResult.Found(FS_MAP[norm] ?: FsType.OTHER(norm))
-        }
+    for ((i, bb) in attempts.withIndex()) {
+        val (found, summary) = tryBlkid(imgArg, bb, i + 1)
+        blkidAttempts += summary
+        Log.d(TAG, summary)
+        found?.let { return it }
     }
 
     fun probe(skip: Int, count: Int) = hexProbe(imagePath, skip, count)

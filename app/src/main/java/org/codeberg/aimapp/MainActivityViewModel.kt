@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.codeberg.aimapp.utils.SAFImageProvider
+import org.codeberg.aimapp.utils.checkEnvironment
 import org.codeberg.aimapp.utils.disk.DetectFsResult
 import org.codeberg.aimapp.utils.disk.detectFilesystem
 import org.codeberg.aimapp.utils.mounts.BindResult
@@ -37,7 +38,6 @@ import org.codeberg.aimapp.utils.paths.ImagePathResolver
 import org.codeberg.aimapp.utils.paths.validateBindDir
 import org.codeberg.aimapp.utils.paths.validatePath
 import java.io.File
-import org.codeberg.aimapp.utils.checkEnvironment
 import org.codeberg.aimapp.utils.disk.formatImage as formatDiskImage
 import org.codeberg.aimapp.utils.envStatus as envStatusFlow
 

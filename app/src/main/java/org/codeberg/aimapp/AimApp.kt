@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
 import com.topjohnwu.superuser.Shell
-import org.codeberg.aimapp.BuildConfig
 
 class AimApplication : Application() {
     companion object {
