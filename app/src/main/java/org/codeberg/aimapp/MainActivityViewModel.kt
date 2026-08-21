@@ -37,7 +37,7 @@ import org.codeberg.aimapp.utils.paths.ImagePathResolver
 import org.codeberg.aimapp.utils.paths.validateBindDir
 import org.codeberg.aimapp.utils.paths.validatePath
 import java.io.File
-import org.codeberg.aimapp.utils.checkEnvironment as runEnvCheck
+import org.codeberg.aimapp.utils.checkEnvironment
 import org.codeberg.aimapp.utils.disk.formatImage as formatDiskImage
 import org.codeberg.aimapp.utils.envStatus as envStatusFlow
 
@@ -155,7 +155,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     }
 
     init {
-        checkEnvironment()
+        runEnvCheck()
     }
 
     private suspend fun <T> withLockedUI(block: suspend () -> T): T {
@@ -195,7 +195,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         val effectiveBindDir = oldBind?.bindDir ?: bindDir
         val effectiveDirectMount = oldBind?.directMount ?: directMount
         withContext(Dispatchers.IO) {
-            mountManager.removeStorageBind(stem, effectiveBindDir, effectiveDirectMount)
+            mountManager.removeBindMount(stem, effectiveBindDir, effectiveDirectMount)
         }
         imagePath?.let { mountedBindState.remove(it) }
         val result = withContext(Dispatchers.IO) {
@@ -235,10 +235,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 path, storedPart, mode, stem, displayName, preservePermissions
             )
             else mountManager.mountImage(
-                path,
-                mode,
-                stem,
-                preservePermissions = preservePermissions
+                path, mode, stem, preservePermissions = preservePermissions
             )
         }
     }
@@ -327,21 +324,12 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         _alerts.update { it.drop(1) }
     }
 
-    fun checkEnvironment() {
+    fun runEnvCheck() {
         viewModelScope.launch {
             withLockedUI {
-                try {
-                    withContext(Dispatchers.IO) { runEnvCheck() }
-                    _envChecked.value = true
-                } catch (e: Exception) {
-                    Log.e(TAG, "Environment check failed", e)
-                    alert(
-                        Alert.Failure(
-                            e.message ?: app.getString(R.string.alert_environment_check_failed)
-                        )
-                    )
-                }
-                refreshAndRebuild()
+                val status = withContext(Dispatchers.IO) { checkEnvironment() }
+                _envChecked.value = true
+                if (status.ready) refreshAndRebuild()
             }
         }
     }
@@ -411,7 +399,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                     val effectiveBindDir = oldBind?.bindDir ?: bindDir
                     val effectiveDirectMount = oldBind?.directMount ?: (img.bindDir != null)
                     withContext(Dispatchers.IO) {
-                        mountManager.removeStorageBind(
+                        mountManager.removeBindMount(
                             cleanupStem, effectiveBindDir, effectiveDirectMount
                         )
                     }
@@ -667,7 +655,6 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         allImported: List<ImportedImage>,
         errors: MutableList<String>,
     ) {
-        withContext(Dispatchers.IO) { mountManager.refreshMountedImages() }
         val currentMounts = mountManager.mountedImages.value
         val defaultBindDir = _bindDir.value
         for (img in snapshot) {
@@ -682,7 +669,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 if (oldBind != null && (oldBind.bindDir != imageBindDir || oldBind.directMount != isCustomBindDir)) {
                     val oldStem = mountedStem[img.path] ?: stem
                     withContext(Dispatchers.IO) {
-                        mountManager.removeStorageBind(
+                        mountManager.removeBindMount(
                             oldStem, oldBind.bindDir, oldBind.directMount
                         )
                     }
@@ -707,15 +694,14 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                         )
                     }
 
-                    else -> { /* Skipped */
-                    }
+                    else -> {}
                 }
             } else {
                 val oldBind = mountedBindState[img.path]
                 val effectiveBindDir = oldBind?.bindDir ?: imageBindDir
                 val effectiveDirectMount = oldBind?.directMount ?: isCustomBindDir
                 withContext(Dispatchers.IO) {
-                    mountManager.removeStorageBind(stem, effectiveBindDir, effectiveDirectMount)
+                    mountManager.removeBindMount(stem, effectiveBindDir, effectiveDirectMount)
                 }
                 mountedBindState.remove(img.path)
             }
@@ -749,9 +735,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 if (ui?.isMounted == true && ui.mountedImage != null) {
                     val unmountStem = mountedStem[path] ?: stemFor(path)
                     val err = unmountWithCleanup(
-                        ui.mountedImage,
-                        unmountStem,
-                        preservePermissions = ui.preservePermissions
+                        ui.mountedImage, unmountStem, preservePermissions = ui.preservePermissions
                     )
                     if (err != null) {
                         alert(
@@ -906,10 +890,7 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
                 )
             }
             return mountManager.mountImage(
-                path,
-                mode,
-                stem,
-                preservePermissions = preservePermissions
+                path, mode, stem, preservePermissions = preservePermissions
             )
         }
         val partition = pr.partitions.find { it.index == partIndex }

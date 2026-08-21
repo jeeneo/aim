@@ -129,7 +129,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
 
     val storageSettingsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { viewModel.checkEnvironment() }
+    ) { viewModel.runEnvCheck() }
     val openStorageSettings = {
         val intent = Intent(
             Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
@@ -320,7 +320,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                         item(key = "cat_env_body") {
                             GroupedRow(
                                 position = positionFor(envRowCount, envRowCount),
-                                onClick = if (!isBusy) ({ viewModel.checkEnvironment() }) else null,
+                                onClick = if (!isBusy) ({ viewModel.runEnvCheck() }) else null,
                             ) {
                                 GroupedTextContent(
                                     title = stringResource(R.string.pref_retry_checks_name),

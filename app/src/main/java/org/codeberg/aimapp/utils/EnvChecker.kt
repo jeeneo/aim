@@ -4,6 +4,7 @@ package org.codeberg.aimapp.utils
 
 import android.os.Environment
 import android.util.Log
+import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.codeberg.aimapp.AimApplication
 import org.codeberg.aimapp.R
@@ -38,32 +39,57 @@ private fun checkStorageAccess(): Boolean = Environment.isExternalStorageManager
 
 private fun resolveBusyboxPath(): String? {
     BUSYBOX_CANDIDATES.forEach { candidate ->
-        if (candidate.startsWith("/")) {
-            if (RootShell.cmd("test", ShellArg.literal("-x"), pathArg(candidate)).exitCode == 0) {
-                return candidate
-            }
+        val result = if (candidate.startsWith("/")) {
+            RootShell.cmd("test", ShellArg.literal("-x"), pathArg(candidate))
         } else {
-            val resolved = RootShell.cmd(
+            RootShell.cmd(
                 "command", ShellArg.literal("-v"), ShellArg.of(candidate), ignoreError = true
-            ).output.lineSequence().firstOrNull()?.trim()
+            )
+        }
+        Log.d(TAG, "busybox candidate '$candidate': code=${result.exitCode} out=${result.output}")
+        if (candidate.startsWith("/")) {
+            if (result.exitCode == 0) return candidate
+        } else {
+            val resolved = result.output.lineSequence().firstOrNull()?.trim()
             if (!resolved.isNullOrBlank()) return resolved
         }
     }
     return null
 }
 
+private const val TAG = "EnvChecker"
+
 // check root access and locate busybox
 fun checkEnv(): EnvCheckResult {
-    val rootOk = RootShell.cmd("id").let { it.exitCode == 0 && "uid=0" in it.output }
-    if (!rootOk) return EnvCheckResult.RootDenied
-    val busyboxPath = resolveBusyboxPath() ?: return EnvCheckResult.BusyboxNotFound
-    val bbVersion =
-        RootShell.cmd(busyboxPath).output.lineSequence()
-            .firstOrNull()?.trim()
-    Log.d("EnvChecker", "BusyBox: $bbVersion")
-    Log.d("EnvChecker", "Android: ${android.os.Build.VERSION.RELEASE}")
-    Log.d("EnvChecker", "All-files access: ${checkStorageAccess()}")
-    return EnvCheckResult.Ready(busyboxPath)
+    Shell.getCachedShell()?.let { cached ->
+        if (!cached.isRoot) runCatching { cached.close() }
+    }
+    val rootStatus = try {
+        Shell.getShell().status
+    } catch (_: Exception) {
+        Shell.UNKNOWN
+    }
+    val rootOk = rootStatus == Shell.ROOT_SHELL
+    val busyboxPath = if (rootOk) resolveBusyboxPath() else null
+    val storageOk = checkStorageAccess()
+    val missing = buildList {
+        if (!rootOk) add("root unavailable (status=$rootStatus)")
+        if (rootOk && busyboxPath == null) add("busybox not found (tried: $BUSYBOX_CANDIDATES)")
+        if (!storageOk) add("all-files access not granted")
+    }
+    if (missing.isNotEmpty()) Log.w(TAG, "env not ready: ${missing.joinToString("; ")}")
+    return when {
+        !rootOk -> EnvCheckResult.RootDenied
+        busyboxPath == null -> EnvCheckResult.BusyboxNotFound
+        else -> EnvCheckResult.Ready(busyboxPath).also {
+            val bbVersion =
+                RootShell.cmd(busyboxPath).output.lineSequence()
+                    .firstOrNull()?.trim()
+            Log.d(TAG, "BusyBox: $bbVersion")
+            Log.d(TAG, "Android: ${android.os.Build.VERSION.RELEASE}")
+            Log.d(TAG, "All-files access: $storageOk")
+        }
+    }
 }
 
 fun checkEnvironment(): EnvironmentStatus {
@@ -71,32 +97,39 @@ fun checkEnvironment(): EnvironmentStatus {
     val storageMessage = AimApplication.ctx.getString(
         if (storageOk) R.string.env_storage_granted else R.string.env_storage_denied
     )
-    val status = when (val result = checkEnv()) {
-        is EnvCheckResult.RootDenied -> EnvironmentStatus(
-            rootMessage = AimApplication.ctx.getString(R.string.env_root_denied),
-            busyboxMessage = AimApplication.ctx.getString(R.string.env_busybox_skipped),
-            storageAvailable = storageOk,
-            storageMessage = storageMessage,
-        )
+    val status = try {
+        when (val result = checkEnv()) {
+            is EnvCheckResult.RootDenied -> EnvironmentStatus(
+                rootMessage = AimApplication.ctx.getString(R.string.env_root_denied),
+                busyboxMessage = AimApplication.ctx.getString(R.string.env_busybox_skipped),
+                storageAvailable = storageOk,
+                storageMessage = storageMessage,
+            )
 
-        is EnvCheckResult.BusyboxNotFound -> EnvironmentStatus(
-            rootAvailable = true,
-            rootMessage = AimApplication.ctx.getString(R.string.env_root_granted),
-            busyboxMessage = AimApplication.ctx.getString(R.string.env_busybox_not_found),
-            storageAvailable = storageOk,
-            storageMessage = storageMessage,
-            ready = false,
-        )
+            is EnvCheckResult.BusyboxNotFound -> EnvironmentStatus(
+                rootAvailable = true,
+                rootMessage = AimApplication.ctx.getString(R.string.env_root_granted),
+                busyboxMessage = AimApplication.ctx.getString(R.string.env_busybox_not_found),
+                storageAvailable = storageOk,
+                storageMessage = storageMessage,
+                ready = false,
+            )
 
-        is EnvCheckResult.Ready -> EnvironmentStatus(
-            rootAvailable = true,
-            rootMessage = AimApplication.ctx.getString(R.string.env_root_granted),
-            busyboxAvailable = true,
-            busyboxPath = result.busyboxPath,
-            busyboxMessage = AimApplication.ctx.getString(R.string.env_busybox_system_found),
-            storageAvailable = storageOk,
-            storageMessage = storageMessage,
-            ready = true,
+            is EnvCheckResult.Ready -> EnvironmentStatus(
+                rootAvailable = true,
+                rootMessage = AimApplication.ctx.getString(R.string.env_root_granted),
+                busyboxAvailable = true,
+                busyboxPath = result.busyboxPath,
+                busyboxMessage = AimApplication.ctx.getString(R.string.env_busybox_system_found),
+                storageAvailable = storageOk,
+                storageMessage = storageMessage,
+                ready = true,
+            )
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Environment check failed", e)
+        EnvironmentStatus(
+            rootMessage = AimApplication.ctx.getString(R.string.alert_environment_check_failed)
         )
     }
     envStatus.value = status

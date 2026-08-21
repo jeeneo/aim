@@ -5,6 +5,7 @@ package org.codeberg.aimapp.utils.mounts
 import android.content.Context
 import android.util.Log
 import org.codeberg.aimapp.R
+import org.codeberg.aimapp.utils.shell.LOOP_DEV_REGEX
 import org.codeberg.aimapp.utils.shell.RootShell
 import org.codeberg.aimapp.utils.shell.ShellArg
 import org.codeberg.aimapp.utils.shell.ShellCmd
@@ -109,11 +110,20 @@ fun doMount(
     )
     var attachedLoop: String? = null
     var mountSucceeded = false
+    val hasSystemLosetup =
+        RootShell.cmd("test", ShellArg.literal("-x"), pathArg("/system/bin/losetup")).exitCode == 0
+    if (!hasSystemLosetup) Log.d(TAG, "system losetup not found, falling back to busybox")
+    val loopTool = if (hasSystemLosetup) "" else busyboxBin
     try {
-        val loopDev = RootShell.cmd(
-            "losetup", ShellArg.literal("-f"), busyboxBin = busyboxBin
-        ).output.lineSequence().firstOrNull()?.trim() ?: return failCleanup(
-            mountPoint, null, ctx.getString(R.string.error_no_free_loop), busyboxBin
+        val findFree = RootShell.cmd(
+            "losetup", ShellArg.literal("-f"), busyboxBin = loopTool
+        )
+        val loopDev = findFree.output.lineSequence().firstOrNull()?.trim()
+            ?.takeIf { it.matches(LOOP_DEV_REGEX) } ?: return failCleanup(
+            mountPoint,
+            null,
+            ctx.getString(R.string.error_no_free_loop, detailOrUnknown(findFree.output)),
+            busyboxBin
         )
         Log.d(TAG, "loop=$loopDev")
         attachedLoop = loopDev
@@ -147,7 +157,7 @@ fun doMount(
         }
         Log.d(TAG, "losetup: dev=$loopDev" + if (isPartition) ", offset=$partOffset" else "")
         val attach = RootShell.cmd(
-            "losetup", *losetupArgs.toTypedArray(), busyboxBin = busyboxBin, redirectErr = true
+            "losetup", *losetupArgs.toTypedArray(), busyboxBin = loopTool, redirectErr = true
         )
         Log.d(TAG, "losetup: exit=${attach.exitCode}, out=${attach.output.trim().take(200)}")
         if (attach.exitCode != 0) return failCleanup(
@@ -189,7 +199,7 @@ fun doMount(
                     "losetup",
                     ShellArg.literal("-d"),
                     loopDevArg(dev),
-                    busyboxBin = busyboxBin,
+                    busyboxBin = loopTool,
                     ignoreError = true
                 )
             }

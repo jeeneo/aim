@@ -30,6 +30,9 @@
 -keep class org.codeberg.aimapp.utils.shell.ShellArg { *; }
 -keep class org.codeberg.aimapp.utils.shell.RootShell { *; }
 
+-keep class com.topjohnwu.superuser.** { *; }
+-dontwarn com.topjohnwu.superuser.**
+
 -keep class android.util.Log { *; }
 -keep class java.util.logging.** { *; }
 -keepclassmembers class android.util.Log {

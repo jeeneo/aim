@@ -246,16 +246,13 @@ class MountManager(
         requireEnvReady()?.let { return it }
         refreshMountedImages()
         requireMountCapacity()?.let { return it }
-
         val imagePath = path.trim()
         if (imagePath.isBlank()) return fail(R.string.error_empty_path)
-
         val isIso = imagePath.endsWith(".iso", ignoreCase = true)
         if (!imagePath.endsWith(
                 ".img", ignoreCase = true
             ) && !isIso
         ) return fail(R.string.error_only_img_iso_supported)
-
         val imageFile = File(imagePath)
         if (!imageFile.exists()) return fail(R.string.error_image_not_found, imagePath)
         if (!validatePath(imagePath)) return fail(R.string.error_image_path_invalid_chars)
@@ -284,8 +281,7 @@ class MountManager(
         } catch (e: PartitionedImageException) {
             Log.d(TAG, "Partitioned image detected: $imagePath")
             val partResult = PartitionedImageResult(
-                e.tableInfo,
-                probePartitionFilesystems(ctx, imagePath, e.tableInfo.partitions)
+                e.tableInfo, probePartitionFilesystems(ctx, imagePath, e.tableInfo.partitions)
             )
             return MountResult.PartitionedImage(partResult)
         }
@@ -407,19 +403,13 @@ class MountManager(
     ): BindResult = mountMutex.withLock {
         requireEnvReadyBind()?.let { return it }
         bindDir ?: return bindFail(R.string.error_bind_dir_not_specified)
-
-        val rbd =
-            resolveAndValidateBindDir(bindDir) ?: return bindFail(R.string.error_bind_dir_rejected)
-
+        val bindmount = bindMountValidate(bindDir) ?: return bindFail(R.string.error_bind_dir_rejected)
         val safeStem = sanitizeStem(stem)
         val source = "$mountsDir/$safeStem"
-        val target = if (directMount) rbd else "$rbd/$safeStem"
-
-        if (!validatePath(source) || !validatePath(target) || !validatePath(rbd)) return bindFail(R.string.error_path_invalid_chars)
-
+        val target = if (directMount) bindmount else "$bindmount/$safeStem"
+        if (!validatePath(source) || !validatePath(target) || !validatePath(bindmount)) return bindFail(R.string.error_path_invalid_chars)
         val tgtArg = pathArg(target)
-        val dirArg = pathArg(rbd)
-
+        val dirArg = pathArg(bindmount)
         val mkdirDir = RootShell.cmd(
             "mkdir", ShellArg.literal("-p"), dirArg, chain = ShellCmd.chain(
                 ShellCmd.of("chown", ShellArg.literal("1023:1023"), dirArg),
@@ -427,8 +417,8 @@ class MountManager(
             )
         )
         if (mkdirDir.exitCode != 0) {
-            Log.e(TAG, "Failed to create storage dir: $rbd")
-            return bindFail(R.string.error_failed_create_storage_dir, rbd)
+            Log.e(TAG, "Failed to create storage dir: $bindmount")
+            return bindFail(R.string.error_failed_create_storage_dir, bindmount)
         }
         if (isMountedAt(target)) return BindResult.AlreadyExposed(target)
         if (directMount) {
@@ -466,25 +456,21 @@ class MountManager(
         return BindResult.Exposed(target)
     }
 
-    suspend fun removeStorageBind(
+    suspend fun removeBindMount(
         stem: String,
         bindDir: String? = null,
         directMount: Boolean = false,
     ): BindResult = mountMutex.withLock {
         bindDir ?: return BindResult.Skipped
-
-        val rbd =
-            resolveAndValidateBindDir(bindDir) ?: return bindFail(R.string.error_bind_dir_rejected)
-
-        val target = if (directMount) rbd else "$rbd/${sanitizeStem(stem)}"
+        val bindmount = bindMountValidate(bindDir) ?: return bindFail(R.string.error_bind_dir_rejected)
+        val target = if (directMount) bindmount else "$bindmount/${sanitizeStem(stem)}"
         if (!validatePath(target)) return bindFail(R.string.error_path_invalid_chars)
-
         val tgtArg = pathArg(target)
         if (isMountedAt(target)) {
-            RootShell.cmd("umount", tgtArg, ignoreError = true)
+            RootShell.cmd("umount", tgtArg)
         }
-        RootShell.cmd("rmdir", tgtArg, ignoreError = true)
-        cleanupEmptyBindDir(rbd)
+        RootShell.cmd("rmdir", tgtArg)
+        cleanupEmptyBindDir(bindmount)
         return BindResult.Removed(target)
     }
 
@@ -504,8 +490,7 @@ class MountManager(
             RandomAccessFile(imagePath, "r").use { f ->
                 val magic = ByteArray(4)
                 f.readFully(magic)
-                magic[0] == 0x3A.toByte() && magic[1] == 0xFF.toByte() &&
-                        magic[2] == 0x26.toByte() && magic[3] == 0xED.toByte()
+                magic[0] == 0x3A.toByte() && magic[1] == 0xFF.toByte() && magic[2] == 0x26.toByte() && magic[3] == 0xED.toByte()
             }
         } catch (e: Exception) {
             Log.w(TAG, "isSparseImage: read failed for $imagePath: ${e.message}")
@@ -515,7 +500,7 @@ class MountManager(
 
     // canonicalizes and double-checks [bindDir] against [validateBindDir] to detect symlink
     // races between the two resolutions. Returns null if the path is rejected at any stage.
-    private fun resolveAndValidateBindDir(bindDir: String): String? {
+    private fun bindMountValidate(bindDir: String): String? {
         if (validateBindDir(ctx, bindDir) != null) {
             Log.w(TAG, "bindDir rejected before canonicalization: $bindDir")
             return null

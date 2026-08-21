@@ -26,8 +26,10 @@ fun secontextArg(ctx: String): ShellArg {
     return ShellArg.of(ctx)
 }
 
+val LOOP_DEV_REGEX = Regex("^/dev/(block/)?loop\\d+$")
+
 fun loopDevArg(dev: String): ShellArg {
     require(dev.length <= 32) { "Loop device path too long: ${dev.length}" }
-    require(dev.matches(Regex("^/dev/(block/)?loop\\d+$"))) { "Invalid loop device: $dev" }
+    require(dev.matches(LOOP_DEV_REGEX)) { "Invalid loop device: $dev" }
     return ShellArg.of(dev)
 }
