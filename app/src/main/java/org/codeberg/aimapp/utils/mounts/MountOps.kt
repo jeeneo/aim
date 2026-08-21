@@ -220,7 +220,7 @@ fun makeAccessible(mountPoint: String, mountsDir: String, busyboxBin: String): O
         pipeInto = ShellCmd.of("awk", ShellArg.of("{print $1}"), busyboxBin = busyboxBin)
     ).output.trim().takeIf { it.matches(Regex("^[a-zA-Z0-9_:,.]+$")) && ':' in it } ?: run {
         Log.w(TAG, "makeAccessible: could not parse SELinux context, using fallback")
-        "u:object_r:app_data_file:s0"
+        APP_DATA_SECONTEXT
     }
 
     val chmodDirs = RootShell.cmd(
@@ -418,7 +418,7 @@ fun resetPermissions(mountPoint: String, busyboxBin: String): OpResult {
     val chown = RootShell.cmd(
         "chown",
         ShellArg.literal("-Rh"),
-        ShellArg.literal("1000:1000"),
+        ShellArg.literal(SYSTEM_OWNERSHIP),
         mpArg,
         busyboxBin = busyboxBin
     )
@@ -427,7 +427,7 @@ fun resetPermissions(mountPoint: String, busyboxBin: String): OpResult {
         return OpResult.failure(Exception("Failed to restore ownership on $mountPoint"))
     }
 
-    listOf(Pair("d", "775"), Pair("f", "664")).forEach { (type, mode) ->
+    listOf(Pair("d", DEFAULT_DIR_MODE), Pair("f", "664")).forEach { (type, mode) ->
         val res = RootShell.cmd(
             "find",
             mpArg,

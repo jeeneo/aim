@@ -15,6 +15,7 @@ import android.webkit.MimeTypeMap
 import org.codeberg.aimapp.BuildConfig
 import org.codeberg.aimapp.R
 import org.codeberg.aimapp.utils.mounts.ImageStore
+import org.codeberg.aimapp.utils.mounts.PROC_MOUNTS
 import org.codeberg.aimapp.utils.mounts.generateMountStem
 import java.io.File
 import java.io.FileNotFoundException
@@ -70,7 +71,7 @@ class SAFImageProvider : DocumentsProvider() {
         val result = mutableListOf<File>()
         try {
             val supportedFs = setOf("ext4", "vfat", "exfat")
-            File("/proc/mounts").forEachLine { line ->
+            File(PROC_MOUNTS).forEachLine { line ->
                 val parts = line.trim().split(Regex("\\s+"))
                 if (parts.size >= 3 && parts[2] in supportedFs && "loop" in parts[0] && parts[1].startsWith(
                         "$prefix/"

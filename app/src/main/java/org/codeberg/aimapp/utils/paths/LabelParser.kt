@@ -3,6 +3,7 @@
 package org.codeberg.aimapp.utils.paths
 
 import android.util.Log
+import org.codeberg.aimapp.utils.disk.EXFAT_OEM_HEX
 import org.codeberg.aimapp.utils.mounts.FsType
 
 private const val TAG = "LabelParser"
@@ -64,7 +65,7 @@ private fun probeVfatLabel(probe: (Int, Int) -> String): String? {
 
 private fun probeExfatLabel(probe: (Int, Int) -> String, sizeBytes: Long): String? {
     val oem = probe(3, 5)
-    if (oem != "4558464154") return null // not "EXFAT"
+    if (oem != EXFAT_OEM_HEX) return null // not "EXFAT"
     val bpsShift = probe(108, 1).toIntOrNull(16) ?: return null
     val spcShift = probe(109, 1).toIntOrNull(16) ?: return null
     if (bpsShift !in 9..12 || spcShift !in 0..25) {

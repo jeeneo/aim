@@ -145,7 +145,7 @@ class MountManager(
         "grep",
         ShellArg.literal("-qF"),
         ShellArg.of(" $mountPoint "),
-        pathArg("/proc/mounts"),
+        pathArg(PROC_MOUNTS),
         busyboxBin = busyboxBin
     ).exitCode == 0
 
@@ -177,7 +177,7 @@ class MountManager(
         "grep",
         ShellArg.literal("-qF"),
         ShellArg.of("$loop "),
-        pathArg("/proc/mounts"),
+        pathArg(PROC_MOUNTS),
         busyboxBin = busyboxBin
     ).exitCode == 0
 
@@ -195,7 +195,7 @@ class MountManager(
             "grep",
             ShellArg.literal("-F"),
             ShellArg.of("$mountsDir/"),
-            pathArg("/proc/mounts"),
+            pathArg(PROC_MOUNTS),
             ignoreError = true
         )
         Log.d(TAG, "readMountedImages: exit=${r.exitCode}, blank=${r.output.isBlank()}")
@@ -402,8 +402,8 @@ class MountManager(
         val dirArg = pathArg(bindmount)
         val mkdirDir = RootShell.cmd(
             "mkdir", ShellArg.literal("-p"), dirArg, chain = ShellCmd.chain(
-                ShellCmd.of("chown", ShellArg.literal("1023:1023"), dirArg),
-                ShellCmd.of("chmod", enumArg("775", ALLOWED_CHMOD_MODES), dirArg)
+                ShellCmd.of("chown", ShellArg.literal(MEDIA_RW_OWNERSHIP), dirArg),
+                ShellCmd.of("chmod", enumArg(DEFAULT_DIR_MODE, ALLOWED_CHMOD_MODES), dirArg)
             )
         )
         if (mkdirDir.exitCode != 0) {
@@ -419,8 +419,8 @@ class MountManager(
         }
         val mkdirTgt = RootShell.cmd(
             "mkdir", ShellArg.literal("-p"), tgtArg, chain = ShellCmd.chain(
-                ShellCmd.of("chown", ShellArg.literal("1023:1023"), tgtArg),
-                ShellCmd.of("chmod", enumArg("775", ALLOWED_CHMOD_MODES), tgtArg)
+                ShellCmd.of("chown", ShellArg.literal(MEDIA_RW_OWNERSHIP), tgtArg),
+                ShellCmd.of("chmod", enumArg(DEFAULT_DIR_MODE, ALLOWED_CHMOD_MODES), tgtArg)
             )
         )
         if (mkdirTgt.exitCode != 0) {
@@ -439,7 +439,7 @@ class MountManager(
         RootShell.cmd(
             "chcon",
             ShellArg.literal("-R"),
-            secontextArg("u:object_r:media_rw_data_file:s0"),
+            secontextArg(MEDIA_RW_SECONTEXT),
             tgtArg,
             ignoreError = true
         )

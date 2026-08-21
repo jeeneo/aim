@@ -464,7 +464,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                             position = CardPosition.Solo,
                             onClick = if (!isBusy) ({ showBindDirEdit = true }) else null,
                             onLongClick = if (!isBusy) {
-                                { viewModel.setBindDir("/storage/emulated/0/mounts") }
+                                { viewModel.setBindDir(MainActivityViewModel.DEFAULT_BIND_DIR) }
                             } else null,
                         ) {
                             GroupedTextContent(

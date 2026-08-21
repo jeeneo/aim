@@ -91,12 +91,12 @@ data class PartitionState(
 
 class MainActivityViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
+        const val DEFAULT_BIND_DIR = "/storage/emulated/0/mounts"
         private val TAG = MainActivityViewModel::class.java.simpleName
         private const val PREFS_SETTINGS = "app_settings"
         private const val KEY_BIND_DIR = "bindmount_dir"
         private const val KEY_SETTINGS_CONFIRMED = "settings_confirmed"
         private const val KEY_PRESERVE_PERMISSIONS_CONFIRMED = "preserve_permissions_confirmed"
-        private const val DEFAULT_BIND_DIR = "/storage/emulated/0/mounts"
     }
 
     private val app: Application = application

@@ -18,10 +18,10 @@ private const val TAG = "FsDetector"
 // valid FAT bytes-per-sector values (little-endian hex of 512, 1024, 2048, 4096)
 internal val VALID_FAT_BPS = setOf("0002", "0004", "0008", "0010")
 internal val VALID_FAT_NFATS = setOf("01", "02")
-private const val EXFAT_OEM_HEX = "4558464154" // "EXFAT"
+internal const val EXFAT_OEM_HEX = "4558464154" // "EXFAT"
+internal const val FAT_SIG_HEX = "55aa"
 private const val NTFS_OEM_HEX = "4e544653" // "NTFS"
 private const val EXT4_MAGIC_HEX = "53ef"
-private const val FAT_SIG_HEX = "55aa"
 private const val ISO_MAGIC_HEX = "4344303031" // "CD001"
 
 internal val FS_MAP = mapOf(
@@ -194,7 +194,7 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): Detec
 
     // neither supported nor known-unsupported, check for partition table
     val fatSig = probe(510, 2)
-    if (fatSig == "55aa") {
+    if (fatSig == FAT_SIG_HEX) {
         Log.w(TAG, "55AA boot sig found but BPB invalid - partitioned disk image?")
         probePartitionTable(ctx, imagePath)?.let { table ->
             throw PartitionedImageException(table)

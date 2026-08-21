@@ -5,6 +5,8 @@ package org.codeberg.aimapp.utils.mounts
 import android.content.Context
 import android.util.Log
 import org.codeberg.aimapp.R
+import org.codeberg.aimapp.utils.disk.EXFAT_OEM_HEX
+import org.codeberg.aimapp.utils.disk.FAT_SIG_HEX
 import org.codeberg.aimapp.utils.disk.VALID_FAT_BPS
 import org.codeberg.aimapp.utils.disk.VALID_FAT_NFATS
 import org.codeberg.aimapp.utils.disk.detectFatVariant
@@ -94,13 +96,13 @@ fun probePartitionTable(ctx: Context, imagePath: String): PartitionTableInfo? {
         hexProbe(imagePath, skip, count, baseOffset)
 
     // MBR signature required for both MBR and GPT (protective MBR)
-    if (hexAt(510, 2) != "55aa") return null
+    if (hexAt(510, 2) != FAT_SIG_HEX) return null
 
     // rule out bare FAT/exFAT filesystems that also carry 55AA
     val bps = hexAt(11, 2)
     val nFats = hexAt(16, 1)
     if (bps in VALID_FAT_BPS && nFats in VALID_FAT_NFATS) return null
-    if (hexAt(3, 5) == "4558464154") return null // exFAT OEM ID
+    if (hexAt(3, 5) == EXFAT_OEM_HEX) return null // exFAT OEM ID
 
     // check part scheme
     val isGPT = hexAt(0, 8, GPT_HEADER_OFFSET) == GPT_SIGNATURE_HEX
