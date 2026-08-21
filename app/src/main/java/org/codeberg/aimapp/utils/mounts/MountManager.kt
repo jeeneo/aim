@@ -24,6 +24,7 @@ import org.codeberg.aimapp.utils.paths.validatePath
 import org.codeberg.aimapp.utils.shell.RootShell
 import org.codeberg.aimapp.utils.shell.ShellArg
 import org.codeberg.aimapp.utils.shell.ShellCmd
+import org.codeberg.aimapp.utils.shell.LOOP_DEV_REGEX
 import org.codeberg.aimapp.utils.shell.enumArg
 import org.codeberg.aimapp.utils.shell.loopDevArg
 import org.codeberg.aimapp.utils.shell.pathArg
@@ -148,15 +149,14 @@ class MountManager(
         busyboxBin = busyboxBin
     ).exitCode == 0
 
-    private fun detachLoop(loopDevice: String) {
+    private fun detachLoop(loopDevice: String): Boolean =
         RootShell.cmd(
             "losetup",
             ShellArg.literal("-d"),
             loopDevArg(loopDevice),
             busyboxBin = busyboxBin,
             ignoreError = true
-        )
-    }
+        ).exitCode == 0
 
     private fun attachedLoops(imagePath: String): List<String> {
         val r = RootShell.cmd(
@@ -169,22 +169,23 @@ class MountManager(
         if (r.exitCode != 0 || r.output.isBlank()) return emptyList()
         return r.output.lineSequence().mapNotNull { line ->
             line.substringBefore(':').trim()
-                .takeIf { it.matches(Regex("^/dev/(block/)?loop\\d+$")) }
+                .takeIf { it.matches(LOOP_DEV_REGEX) }
         }.distinct().toList()
     }
 
+    private fun isLoopMounted(loop: String): Boolean = RootShell.cmd(
+        "grep",
+        ShellArg.literal("-qF"),
+        ShellArg.of("$loop "),
+        pathArg("/proc/mounts"),
+        busyboxBin = busyboxBin
+    ).exitCode == 0
+
     private fun detachStaleLoops(imagePath: String) {
         attachedLoops(imagePath).forEach { loop ->
-            val mounted = RootShell.cmd(
-                "grep",
-                ShellArg.literal("-qF"),
-                ShellArg.of("$loop "),
-                pathArg("/proc/mounts"),
-                busyboxBin = busyboxBin
-            ).exitCode == 0
-            if (!mounted) {
+            if (!isLoopMounted(loop)) {
                 Log.w(TAG, "Detaching stale loop $loop for $imagePath")
-                detachLoop(loop)
+                if (!detachLoop(loop)) Log.w(TAG, "Failed to detach stale loop $loop")
             }
         }
     }
@@ -210,7 +211,7 @@ class MountManager(
             val fs = fsTypeStr?.let { FS_MAP[it] ?: FsType.OTHER(it) }
             when {
                 p.size < 3 -> Log.d(TAG, "SKIP (fields=${p.size}): $line").let { null }
-                fs == null -> Log.d(TAG, "SKIP (unknown fs '${null}'): $line").let { null }
+                fs == null -> Log.d(TAG, "SKIP (unknown fs '$fsTypeStr'): $line").let { null }
                 device == null || "loop" !in device -> Log.d(
                     TAG, "SKIP (not loop, device=$device): $line"
                 ).let { null }
@@ -289,22 +290,15 @@ class MountManager(
         Log.d(TAG, "Detected fs=${fsType.mountType} for $imagePath")
 
         val loops = attachedLoops(imagePath)
-        if (loops.isNotEmpty()) {
-            val mountedLoop = loops.firstOrNull { loop ->
-                RootShell.cmd(
-                    "grep",
-                    ShellArg.literal("-qF"),
-                    ShellArg.of("$loop "),
-                    pathArg("/proc/mounts"),
-                    busyboxBin = busyboxBin
-                ).exitCode == 0
-            }
-            if (mountedLoop != null) {
-                Log.w(TAG, "Image already mounted via $mountedLoop")
-                refreshMountedImages(force = true)
-                return fail(R.string.error_image_already_mounted)
-            }
-            loops.forEach { Log.w(TAG, "Stale loop $it, detaching"); detachLoop(it) }
+        loops.firstOrNull { isLoopMounted(it) }?.let { mountedLoop ->
+            Log.w(TAG, "Image already mounted via $mountedLoop")
+            refreshMountedImages(force = true)
+            return fail(R.string.error_image_already_mounted)
+        }
+        // no loop is actively mounted here, so all attached loops are stale
+        loops.forEach {
+            Log.w(TAG, "Stale loop $it, detaching")
+            if (!detachLoop(it)) Log.w(TAG, "Failed to detach stale loop $it")
         }
 
         val stem = sanitizeStem(
@@ -369,7 +363,7 @@ class MountManager(
                     "restorePermissionsFromSnapshot failed for ${item.mountPoint}: ${it.message}"
                 )
             }
-        } else if (!item.fsType.posixPermissions) {
+        } else {
             Log.w(TAG, "Skipping permission restore for non-POSIX fs ${item.fsType.mountType}")
         }
 
@@ -381,12 +375,8 @@ class MountManager(
             return fail(R.string.error_unmount_failed)
         }
 
-        val loopDetached = runCatching { detachLoop(item.loopDevice) }
-        if (loopDetached.isFailure) {
-            Log.w(
-                TAG,
-                "Loop detach failed for ${item.loopDevice}: ${loopDetached.exceptionOrNull()?.message}"
-            )
+        if (!detachLoop(item.loopDevice)) {
+            Log.w(TAG, "Loop detach failed for ${item.loopDevice}")
         }
 
         File(item.mountPoint).delete() // rmdir semantics: only removes an empty dir
