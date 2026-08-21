@@ -78,7 +78,9 @@ fun doMount(
         )
     }
 
-    if (RootShell.cmd("mkdir", ShellArg.literal("-p"), mp).exitCode != 0) return OpResult.failure(
+    // mount points live under the app-owned mountsDir
+    val mpDir = File(mountPoint)
+    if (!mpDir.isDirectory && !mpDir.mkdirs()) return OpResult.failure(
         Exception(ctx.getString(R.string.error_failed_create_mount_point_dir, mountPoint))
     )
 
@@ -191,7 +193,7 @@ fun doMount(
                     ignoreError = true
                 )
             }
-            RootShell.cmd("rmdir", pathArg(mountPoint), ignoreError = true)
+            File(mountPoint).delete() // rmdir semantics: only removes an empty dir
         }
     }
 }
@@ -284,10 +286,14 @@ fun snapshotPermissions(mountPoint: String, snapshotFile: String, busyboxBin: St
         Log.w(TAG, "snapshotPermissions: find/stat failed: ${find.output.take(200)}")
         return OpResult.failure(Exception("Failed to snapshot permissions on $mountPoint"))
     }
-    val count = RootShell.cmd(
-        "wc", ShellArg.literal("-l"), snapshotArg, busyboxBin = busyboxBin
-    ).output.trim().substringBefore(' ').toIntOrNull()
-    if (count == null || count <= 0) {
+    // the snapshot lives in the app's own storage; count entries directly instead of wc -l
+    val count = try {
+        File(snapshotFile).useLines { lines -> lines.count { it.isNotBlank() } }
+    } catch (e: Exception) {
+        Log.w(TAG, "snapshotPermissions: could not read snapshot: ${e.message}")
+        0
+    }
+    if (count <= 0) {
         Log.w(TAG, "snapshotPermissions: snapshot empty/invalid at $snapshotFile")
         return OpResult.failure(Exception("Failed to snapshot permissions on $mountPoint"))
     }
@@ -327,7 +333,10 @@ fun restorePermissions(
 ): OpResult {
     val snapFile = File(snapshotFile)
     if (!snapFile.exists() || !preservePermissions) {
-        Log.w(TAG, "restorePermissions: resetting permissions (preservePermissions: $preservePermissions, hasSnapshot: ${snapFile.exists()})")
+        Log.w(
+            TAG,
+            "restorePermissions: resetting permissions (preservePermissions: $preservePermissions, hasSnapshot: ${snapFile.exists()})"
+        )
         return resetPermissions(mountPoint, busyboxBin)
     }
     val raw = runCatching { snapFile.readText() }.getOrElse {
@@ -444,7 +453,7 @@ fun failCleanup(mp: String, loop: String?, msg: String, busyboxBin: String): OpR
             ignoreError = true
         )
     }
-    RootShell.cmd("rmdir", pathArg(mp), ignoreError = true)
+    File(mp).delete() // rmdir semantics: only removes an empty dir
     return OpResult.failure(Exception(msg))
 }
 

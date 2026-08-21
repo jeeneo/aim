@@ -29,6 +29,7 @@ import org.codeberg.aimapp.utils.shell.loopDevArg
 import org.codeberg.aimapp.utils.shell.pathArg
 import org.codeberg.aimapp.utils.shell.secontextArg
 import java.io.File
+import java.io.RandomAccessFile
 
 enum class MountMode { LOCAL, PUBLIC }
 
@@ -61,6 +62,8 @@ data class EnvironmentStatus(
     val busyboxAvailable: Boolean = false,
     val busyboxPath: String = "",
     val busyboxMessage: String = "",
+    val storageAvailable: Boolean = false,
+    val storageMessage: String = "",
     val ready: Boolean = false,
 )
 
@@ -272,6 +275,9 @@ class MountManager(
 
                 is DetectFsResult.AccessError -> {
                     Log.w(TAG, "fs access error for $imagePath: ${detect.reason}")
+                    if ("EACCES" in detect.reason || "Permission denied" in detect.reason) {
+                        return fail(R.string.error_storage_access_denied)
+                    }
                     return fail(R.string.error_failed_to_access_image, detect.reason)
                 }
             }
@@ -279,7 +285,7 @@ class MountManager(
             Log.d(TAG, "Partitioned image detected: $imagePath")
             val partResult = PartitionedImageResult(
                 e.tableInfo,
-                probePartitionFilesystems(ctx, imagePath, e.tableInfo.partitions, busyboxBin)
+                probePartitionFilesystems(ctx, imagePath, e.tableInfo.partitions)
             )
             return MountResult.PartitionedImage(partResult)
         }
@@ -340,9 +346,9 @@ class MountManager(
     }
 
     fun probePartitions(path: String): PartitionedImageResult? {
-        val table = probePartitionTable(ctx, path, busyboxBin) ?: return null
+        val table = probePartitionTable(ctx, path) ?: return null
         return PartitionedImageResult(
-            table, probePartitionFilesystems(ctx, path, table.partitions, busyboxBin)
+            table, probePartitionFilesystems(ctx, path, table.partitions)
         )
     }
 
@@ -387,7 +393,7 @@ class MountManager(
             )
         }
 
-        RootShell.cmd("rmdir", mpArg, ignoreError = true)
+        File(item.mountPoint).delete() // rmdir semantics: only removes an empty dir
         File(snapshotFile).delete()
         refreshMountedImages(force = true)
         onRootsChanged(ctx)
@@ -492,19 +498,19 @@ class MountManager(
     private fun requireEnvReadyBind(): BindResult.Failure? =
         if (!envStatus.value.ready) BindResult.Failure(ctx.getString(R.string.error_env_not_ready)) else null
 
-    // detects sparse ext4 images via the ext4 superblock magic (0xEF53) at byte offset 0x438, reads only 2KB
+    // sparse images cannot be loop-mounted easily
     private fun isSparseImage(imagePath: String): Boolean {
-        // detect Android sparse image magic 0xED26FF3A (hexdump prints little-endian bytes as "3a ff 26 ed").
-        // read only the first 2KB since the magic should be within that
-        return RootShell.cmd(
-            "hexdump",
-            ShellArg.literal("-C"),
-            ShellArg.literal("-n"),
-            ShellArg.literal("2048"),
-            pathArg(imagePath),
-            busyboxBin = busyboxBin,
-            pipeInto = ShellCmd.of("grep", ShellArg.of("3a ff 26 ed"))
-        ).let { it.exitCode == 0 && it.output.isNotBlank() }
+        return try {
+            RandomAccessFile(imagePath, "r").use { f ->
+                val magic = ByteArray(4)
+                f.readFully(magic)
+                magic[0] == 0x3A.toByte() && magic[1] == 0xFF.toByte() &&
+                        magic[2] == 0x26.toByte() && magic[3] == 0xED.toByte()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "isSparseImage: read failed for $imagePath: ${e.message}")
+            false
+        }
     }
 
     // canonicalizes and double-checks [bindDir] against [validateBindDir] to detect symlink

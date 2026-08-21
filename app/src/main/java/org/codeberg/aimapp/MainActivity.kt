@@ -5,8 +5,10 @@
 package org.codeberg.aimapp
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -125,7 +127,24 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
             uri?.let { viewModel.addImage(it) }
         }
 
-    val showEnv = envChecked && !envStatus.ready
+    val storageSettingsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { viewModel.checkEnvironment() }
+    val openStorageSettings = {
+        val intent = Intent(
+            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+            Uri.parse("package:$pkgName")
+        )
+        runCatching { storageSettingsLauncher.launch(intent) }.onFailure {
+            runCatching {
+                storageSettingsLauncher.launch(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            }
+        }
+        Unit
+    }
+
+    val showEnv = envChecked && (!envStatus.ready || !envStatus.storageAvailable)
+    val envRowCount = if (envStatus.storageAvailable) 2 else 3
 
     if (showBindDirEdit) {
         BindDirDialog(
@@ -266,7 +285,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                         item(key = "cat_env_header") {
                             SectionHeader(text = stringResource(R.string.pref_header_environment))
                             GroupedRow(
-                                position = positionFor(1, 2)
+                                position = positionFor(1, envRowCount)
                             ) {
                                 GroupedTextContent(
                                     title = stringResource(R.string.pref_root_busybox_status_name),
@@ -284,9 +303,23 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                                 )
                             }
                         }
+                        if (!envStatus.storageAvailable) {
+                            item(key = "cat_env_storage") {
+                                GroupedRow(
+                                    position = positionFor(2, envRowCount),
+                                    onClick = if (!isBusy) openStorageSettings else null,
+                                ) {
+                                    GroupedTextContent(
+                                        title = stringResource(R.string.pref_storage_access_name),
+                                        summary = envStatus.storageMessage,
+                                        summaryColor = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
+                        }
                         item(key = "cat_env_body") {
                             GroupedRow(
-                                position = positionFor(2, 2),
+                                position = positionFor(envRowCount, envRowCount),
                                 onClick = if (!isBusy) ({ viewModel.checkEnvironment() }) else null,
                             ) {
                                 GroupedTextContent(

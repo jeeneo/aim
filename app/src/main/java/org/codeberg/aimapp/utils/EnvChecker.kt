@@ -2,6 +2,7 @@
 
 package org.codeberg.aimapp.utils
 
+import android.os.Environment
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.codeberg.aimapp.AimApplication
@@ -27,8 +28,13 @@ val envStatus = MutableStateFlow(
     EnvironmentStatus(
         rootMessage = AimApplication.ctx.getString(R.string.env_not_checked),
         busyboxMessage = AimApplication.ctx.getString(R.string.env_not_checked),
+        storageMessage = AimApplication.ctx.getString(R.string.env_not_checked),
     )
 )
+
+// image bytes are read in-process since dd/hexdump probes were removed,
+// so shared-storage images need files access granted to the app itself
+private fun checkStorageAccess(): Boolean = Environment.isExternalStorageManager()
 
 private fun resolveBusyboxPath(): String? {
     BUSYBOX_CANDIDATES.forEach { candidate ->
@@ -56,20 +62,29 @@ fun checkEnv(): EnvCheckResult {
             .firstOrNull()?.trim()
     Log.d("EnvChecker", "BusyBox: $bbVersion")
     Log.d("EnvChecker", "Android: ${android.os.Build.VERSION.RELEASE}")
+    Log.d("EnvChecker", "All-files access: ${checkStorageAccess()}")
     return EnvCheckResult.Ready(busyboxPath)
 }
 
 fun checkEnvironment(): EnvironmentStatus {
+    val storageOk = checkStorageAccess()
+    val storageMessage = AimApplication.ctx.getString(
+        if (storageOk) R.string.env_storage_granted else R.string.env_storage_denied
+    )
     val status = when (val result = checkEnv()) {
         is EnvCheckResult.RootDenied -> EnvironmentStatus(
             rootMessage = AimApplication.ctx.getString(R.string.env_root_denied),
             busyboxMessage = AimApplication.ctx.getString(R.string.env_busybox_skipped),
+            storageAvailable = storageOk,
+            storageMessage = storageMessage,
         )
 
         is EnvCheckResult.BusyboxNotFound -> EnvironmentStatus(
             rootAvailable = true,
             rootMessage = AimApplication.ctx.getString(R.string.env_root_granted),
             busyboxMessage = AimApplication.ctx.getString(R.string.env_busybox_not_found),
+            storageAvailable = storageOk,
+            storageMessage = storageMessage,
             ready = false,
         )
 
@@ -79,6 +94,8 @@ fun checkEnvironment(): EnvironmentStatus {
             busyboxAvailable = true,
             busyboxPath = result.busyboxPath,
             busyboxMessage = AimApplication.ctx.getString(R.string.env_busybox_system_found),
+            storageAvailable = storageOk,
+            storageMessage = storageMessage,
             ready = true,
         )
     }

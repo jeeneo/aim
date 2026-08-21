@@ -33,11 +33,8 @@ private val ALLOWED_BINARIES = setOf(
     "find",
     // utilities
     "busybox", // lol
-    "dd",
-    "hexdump",
     "blkid",
     "stat",
-    "wc",
     "grep",
     "awk",
     "ls",

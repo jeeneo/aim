@@ -9,9 +9,9 @@ import org.codeberg.aimapp.utils.mounts.PartitionTableInfo
 import org.codeberg.aimapp.utils.mounts.probePartitionTable
 import org.codeberg.aimapp.utils.shell.RootShell
 import org.codeberg.aimapp.utils.shell.ShellArg
-import org.codeberg.aimapp.utils.shell.ShellCmd
 import org.codeberg.aimapp.utils.shell.pathArg
 import java.io.File
+import java.io.RandomAccessFile
 
 private const val TAG = "FsDetector"
 
@@ -31,32 +31,27 @@ internal val FS_MAP = mapOf(
     "iso9660" to FsType.ISO9660,
 )
 
-fun hexProbe(
-    imagePath: String,
-    skip: Int,
-    count: Int,
-    busyboxBin: String,
-    imgArg: ShellArg = pathArg(imagePath),
-    baseOffset: Long = 0,
-): String {
-    val totalSkip = baseOffset + skip
-    val ddResult = RootShell.cmd(
-        "dd",
-        ShellArg.literal("if=${imgArg.quoted}"),
-        ShellArg.literal("bs=1"),
-        ShellArg.literal("skip=$totalSkip"),
-        ShellArg.literal("count=$count"),
-        busyboxBin = busyboxBin,
-        ignoreError = true,
-        pipeInto = ShellCmd.of(
-            "hexdump",
-            ShellArg.literal("-v"),
-            ShellArg.literal("-e"),
-            ShellArg.of("/1 \"%02x\""),
-            busyboxBin = busyboxBin
-        )
-    )
-    return ddResult.output.trim().lowercase()
+// read [count] bytes at [skip] (plus [baseOffset]) directly from the image and return
+// them as lowercase hex pairs; empty string on any read failure
+fun hexProbe(imagePath: String, skip: Int, count: Int, baseOffset: Long = 0): String {
+    return try {
+        RandomAccessFile(imagePath, "r").use { f ->
+            f.seek(baseOffset + skip)
+            val buf = ByteArray(count)
+            var off = 0
+            while (off < count) {
+                val n = f.read(buf, off, count - off)
+                if (n < 0) break
+                off += n
+            }
+            buildString(off * 2) {
+                for (i in 0 until off) append("%02x".format(buf[i].toInt() and 0xFF))
+            }
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "hexProbe($imagePath, skip=$skip, count=$count) failed: ${e.message}")
+        ""
+    }
 }
 
 // little-endian unsigned int from a hex string (2 hex chars per byte)
@@ -139,20 +134,14 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): Detec
     val imgFile = File(imagePath)
     if (!imgFile.exists()) return DetectFsResult.AccessError("file does not exist")
     val imgArg = pathArg(imagePath)
-    val accessProbe = RootShell.cmd(
-        "dd",
-        ShellArg.literal("if=${imgArg.quoted}"),
-        ShellArg.literal("of=/dev/null"),
-        ShellArg.literal("bs=1"),
-        ShellArg.literal("count=1"),
-        busyboxBin = busyboxBin,
-        redirectErr = true
-    )
-    if (accessProbe.exitCode != 0) {
-        val reason = accessProbe.output.trim()
-        return DetectFsResult.AccessError(
-            reason.ifBlank { "read probe failed" }, accessProbe.exitCode
-        )
+    val accessReason = try {
+        RandomAccessFile(imagePath, "r").use { it.read() }
+        null
+    } catch (e: Exception) {
+        e.message?.takeIf { it.isNotBlank() } ?: "read probe failed"
+    }
+    if (accessReason != null) {
+        return DetectFsResult.AccessError(accessReason)
     }
     fun summarize(out: String, max: Int = 160) =
         out.replace('\n', ' ').replace(Regex("\\s+"), " ").trim()
@@ -199,7 +188,7 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): Detec
         }
     }
 
-    fun probe(skip: Int, count: Int) = hexProbe(imagePath, skip, count, busyboxBin, imgArg)
+    fun probe(skip: Int, count: Int) = hexProbe(imagePath, skip, count)
 
     probeFsMagic(::probe)?.let { return DetectFsResult.Found(it) }
 
@@ -207,7 +196,7 @@ fun detectFilesystem(ctx: Context, imagePath: String, busyboxBin: String): Detec
     val fatSig = probe(510, 2)
     if (fatSig == "55aa") {
         Log.w(TAG, "55AA boot sig found but BPB invalid - partitioned disk image?")
-        probePartitionTable(ctx, imagePath, busyboxBin)?.let { table ->
+        probePartitionTable(ctx, imagePath)?.let { table ->
             throw PartitionedImageException(table)
         }
     }

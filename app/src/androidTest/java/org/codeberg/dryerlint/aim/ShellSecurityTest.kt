@@ -378,7 +378,7 @@ class ShellSecurityTest {
     @Test
     fun testShellCmd_of_stdinRedirection() {
         val imgArg = ShellArg.of("/sdcard/test.img")
-        val cmd = ShellCmd.of("wc", ShellArg.literal("-c"), stdinFrom = imgArg)
+        val cmd = ShellCmd.of("cat", stdinFrom = imgArg)
         assertTrue("Should contain < for stdin", cmd.fragment.contains(" < "))
         assertTrue("Should contain the file path", cmd.fragment.contains("test.img"))
     }

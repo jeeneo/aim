@@ -12,10 +12,7 @@ import org.codeberg.aimapp.utils.disk.hexProbe
 import org.codeberg.aimapp.utils.disk.probeFsMagic
 import org.codeberg.aimapp.utils.paths.labelToMountStem
 import org.codeberg.aimapp.utils.paths.probeLabel
-import org.codeberg.aimapp.utils.shell.RootShell
-import org.codeberg.aimapp.utils.shell.ShellArg
-import org.codeberg.aimapp.utils.shell.ShellCmd
-import org.codeberg.aimapp.utils.shell.pathArg
+import java.io.File
 
 private const val TAG = "PartitionTable"
 private val PARTITION_TYPE_NAMES = mapOf(
@@ -92,10 +89,9 @@ data class PartitionTableInfo(
 )
 
 // check whether an image is a partitioned disk, returns null if not partitioned
-fun probePartitionTable(ctx: Context, imagePath: String, busyboxBin: String): PartitionTableInfo? {
-    val imgArg = pathArg(imagePath)
+fun probePartitionTable(ctx: Context, imagePath: String): PartitionTableInfo? {
     fun hexAt(skip: Int, count: Int, baseOffset: Long = 0L) =
-        hexProbe(imagePath, skip, count, busyboxBin, imgArg, baseOffset)
+        hexProbe(imagePath, skip, count, baseOffset)
 
     // MBR signature required for both MBR and GPT (protective MBR)
     if (hexAt(510, 2) != "55aa") return null
@@ -115,7 +111,7 @@ fun probePartitionTable(ctx: Context, imagePath: String, busyboxBin: String): Pa
     }
 
     // validate partition boundaries against actual image size
-    val totalSize = queryImageSize(busyboxBin, imgArg)
+    val totalSize = queryImageSize(imagePath)
     if (totalSize > 0) {
         entries.removeAll { p ->
             val end = p.offsetBytes + p.sizeBytes
@@ -139,13 +135,11 @@ fun probePartitionTable(ctx: Context, imagePath: String, busyboxBin: String): Pa
 }
 
 fun probePartitionFilesystems(
-    ctx: Context, imagePath: String, partitions: List<PartitionEntry>, busyboxBin: String
+    ctx: Context, imagePath: String, partitions: List<PartitionEntry>
 ): List<PartitionEntry> {
-    val imgArg = pathArg(imagePath)
     return partitions.map { part ->
         val offset = part.offsetBytes
-        fun probe(skip: Int, count: Int) =
-            hexProbe(imagePath, skip, count, busyboxBin, imgArg, offset)
+        fun probe(skip: Int, count: Int) = hexProbe(imagePath, skip, count, offset)
 
         val detected = probeFsMagic(::probe, part.sizeBytes)
         val rawLabel =
@@ -174,21 +168,8 @@ fun probePartitionFilesystems(
     }
 }
 
-// query image file size via stat or wc -c fallback
-private fun queryImageSize(busyboxBin: String, imgArg: ShellArg): Long {
-    val sizeOut = RootShell.cmd(
-        "stat",
-        ShellArg.literal("-c"),
-        ShellArg.literal("%s"),
-        imgArg,
-        busyboxBin = busyboxBin,
-        ignoreError = true,
-        orChain = ShellCmd.of(
-            "wc", ShellArg.literal("-c"), busyboxBin = busyboxBin, stdinFrom = imgArg
-        )
-    )
-    return sizeOut.output.trim().toLongOrNull() ?: 0L
-}
+// query image file size directly; returns 0 when the size can't be determined
+private fun queryImageSize(imagePath: String): Long = File(imagePath).length()
 
 // parse MBR partition entries from the table at offset 446
 private fun parseMBREntries(

@@ -72,6 +72,10 @@
     <string name="env_root_granted">Root access granted</string>
     <string name="env_busybox_system_found">System busybox found</string>
     <string name="env_busybox_not_found">No busybox found</string>
+    <string name="env_storage_granted">All-files access granted</string>
+    <string name="env_storage_denied">All-files access not granted, needed to read images from shared storage</string>
+    <string name="pref_storage_access_name">All-files access</string>
+    <string name="pref_storage_access_desc">Tap to grant in system settings</string>
     <string name="error_env_not_ready">Environment not ready</string>
     <string name="error_mount_limit_reached">Mount limit reached (%d). Unmount an image first.</string>
     <string name="error_empty_path">Empty path</string>
@@ -119,6 +123,7 @@
     <string name="error_mount_not_visible">Mount did not appear in /proc/mounts after success. Your root shell likely uses an isolated mount namespace. Enable global/mount-master namespace in your root manager.</string>
     <string name="error_cannot_resolve_path">Cannot resolve path for %s</string>
     <string name="error_failed_to_access_image">Failed to access image: %s</string>
+    <string name="error_storage_access_denied">Cannot read image: grant AIM \"All files access\" in system settings (see environment section)</string>
 
     <string name="cancel">Cancel</string>
     <string name="posix_warning_header">POSIX permissions</string>
