@@ -36,7 +36,7 @@ Note: if you use KernelSU or similar root solutions and you encounter issues, pl
 
 ## Usage
 
-1. Download the latest version from the [releases page](/releases).
+1. Download the latest version from the [releases page](/releases/latest).
 
 2. Grant root permissions
 
