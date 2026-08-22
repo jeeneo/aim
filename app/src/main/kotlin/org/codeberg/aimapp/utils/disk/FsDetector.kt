@@ -31,6 +31,7 @@ internal val FS_MAP = mapOf(
     "vfat" to FsType.VFAT,
     "exfat" to FsType.EXFAT,
     "iso9660" to FsType.ISO9660,
+    "ntfs" to FsType.NTFS
 )
 
 // read [count] bytes at [skip] (plus [baseOffset]) directly from the image and return
@@ -92,6 +93,10 @@ fun probeFsMagic(probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALUE):
     return detectFsByMagic(probe, sizeBytes) ?: identifyUnsupportedFs(probe)
 }
 
+fun identifyUnsupportedFs(probe: (Int, Int) -> String): FsType? {
+    return if (probe(3, 4) == NTFS_OEM_HEX) FsType.NTFS else null
+}
+
 private fun detectFsByMagic(
     probe: (Int, Int) -> String, sizeBytes: Long = Long.MAX_VALUE
 ): FsType? {
@@ -107,9 +112,6 @@ private fun detectFsByMagic(
     return null
 }
 
-fun identifyUnsupportedFs(probe: (Int, Int) -> String): FsType? {
-    return if (probe(3, 4) == NTFS_OEM_HEX) FsType.OTHER("ntfs3") else null
-}
 
 class PartitionedImageException(val tableInfo: PartitionTableInfo) :
     Exception("Image contains a partition table")

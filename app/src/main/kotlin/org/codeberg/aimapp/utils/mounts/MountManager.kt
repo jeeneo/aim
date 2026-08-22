@@ -42,8 +42,19 @@ sealed class FsType(
     data object EXT4 : FsType("ext4", posixPermissions = true)
     data object VFAT : FsType("vfat", posixPermissions = false)
     data object EXFAT : FsType("exfat", posixPermissions = false)
+    data object NTFS : FsType("ntfs", posixPermissions = false)
     data object ISO9660 : FsType("iso9660", posixPermissions = false, readOnly = true)
     data class OTHER(val name: String) : FsType(name, posixPermissions = true)
+}
+
+fun hasPosixFilesystem(ctx: Context, path: String): Boolean = try {
+    when (val d = detectFilesystem(ctx, path)) {
+        is DetectFsResult.Found -> d.fs.posixPermissions
+        else -> false
+    }
+} catch (e: PartitionedImageException) {
+    probePartitionFilesystems(ctx, path, e.tableInfo.partitions)
+        .any { it.detectedFs?.posixPermissions == true }
 }
 
 data class MountedImage(
@@ -65,7 +76,7 @@ data class EnvironmentStatus(
     val busyboxMessage: String = "",
     val storageAvailable: Boolean = false,
     val storageMessage: String = "",
-    val ready: Boolean = false,
+    val ready: Boolean = false
 )
 
 interface OperationFailure {
@@ -400,7 +411,8 @@ class MountManager(
     ): BindResult = mountMutex.withLock {
         requireEnvReady { BindResult.Failure(it) }?.let { return it }
         bindDir ?: return bindFail(R.string.error_bind_dir_not_specified)
-        val bindmount = bindMountValidate(bindDir) ?: return bindFail(R.string.error_bind_dir_rejected)
+        val bindmount =
+            bindMountValidate(bindDir) ?: return bindFail(R.string.error_bind_dir_rejected)
         val safeStem = sanitizeStem(stem)
         val source = "$mountsDir/$safeStem"
         val target = if (directMount) bindmount else "$bindmount/$safeStem"

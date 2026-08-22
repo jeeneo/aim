@@ -17,7 +17,13 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -55,7 +61,7 @@ fun positionFor(index: Int, count: Int): CardPosition = when {
     else -> CardPosition.Center
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun GroupedRow(
     position: CardPosition,
@@ -67,6 +73,7 @@ fun GroupedRow(
     verticalPadding: Dp = 14.dp,
     horizontalPadding: Dp = 14.dp,
     horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
+    tooltip: String = "",
     content: @Composable RowScope.() -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -81,32 +88,51 @@ fun GroupedRow(
     } else {
         MaterialTheme.colorScheme.surfaceContainerHigh
     }
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .alpha(if (enabled) 1f else 0.6f)
-            .background(background, shape)
-            .then(
-                when {
-                    (onClick != null || onLongClick != null) && enabled -> Modifier.combinedClickable(
-                        interactionSource = interactionSource,
-                        indication = LocalIndication.current,
-                        onClick = { HapticPatterns.tap(); onClick?.invoke() },
-                        onLongClick = onLongClick,
-                    )
+    val row = @Composable {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .alpha(if (enabled) 1f else 0.6f)
+                .background(background, shape)
+                .then(
+                    when {
+                        (onClick != null || onLongClick != null) && enabled -> Modifier.combinedClickable(
+                            interactionSource = interactionSource,
+                            indication = LocalIndication.current,
+                            onClick = { HapticPatterns.tap(); onClick?.invoke() },
+                            onLongClick = onLongClick,
+                        )
 
-                    else -> Modifier
+                        else -> Modifier
+                    }
+                )
+                .padding(
+                    horizontal = horizontalPadding,
+                    vertical = verticalPadding,
+                ),
+            horizontalArrangement = horizontalArrangement,
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+    }
+
+    if (tooltip.isNotEmpty()) {
+        val tooltipState = rememberTooltipState()
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            tooltip = {
+                PlainTooltip {
+                    Text(tooltip)
                 }
-            )
-            .padding(
-                horizontal = horizontalPadding,
-                vertical = verticalPadding,
-            ),
-        horizontalArrangement = horizontalArrangement,
-        verticalAlignment = Alignment.CenterVertically,
-        content = content,
-    )
+            },
+            state = tooltipState,
+        ) {
+            row()
+        }
+    } else {
+        row()
+    }
 }
 
 fun Modifier.screenContentPadding(innerPadding: PaddingValues): Modifier =

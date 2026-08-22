@@ -105,7 +105,7 @@ fun checkEnvironment(): EnvironmentStatus {
                 rootMessage = AimApplication.ctx.getString(R.string.env_root_denied),
                 busyboxMessage = AimApplication.ctx.getString(R.string.env_busybox_skipped),
                 storageAvailable = storageOk,
-                storageMessage = storageMessage,
+                storageMessage = storageMessage
             )
 
             is EnvCheckResult.BusyboxNotFound -> EnvironmentStatus(
@@ -114,7 +114,7 @@ fun checkEnvironment(): EnvironmentStatus {
                 busyboxMessage = AimApplication.ctx.getString(R.string.env_busybox_not_found),
                 storageAvailable = storageOk,
                 storageMessage = storageMessage,
-                ready = false,
+                ready = false
             )
 
             is EnvCheckResult.Ready -> EnvironmentStatus(
@@ -125,7 +125,7 @@ fun checkEnvironment(): EnvironmentStatus {
                 busyboxMessage = AimApplication.ctx.getString(R.string.env_busybox_system_found),
                 storageAvailable = storageOk,
                 storageMessage = storageMessage,
-                ready = true,
+                ready = true
             )
         }
     } catch (e: Exception) {

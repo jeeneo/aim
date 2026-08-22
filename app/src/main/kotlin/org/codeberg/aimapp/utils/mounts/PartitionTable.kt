@@ -86,6 +86,7 @@ fun fsDisplayName(
         FsType.VFAT -> detectFatVariant(imagePath, baseOffset) ?: "FAT"
         FsType.EXFAT -> "exFAT"
         FsType.ISO9660 -> "ISO9660"
+        FsType.NTFS -> "NTFS"
         is FsType.OTHER -> fs.name
         null -> ctx.getString(R.string.image_type_raw)
     }

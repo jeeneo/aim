@@ -40,6 +40,7 @@ import org.codeberg.aimapp.utils.paths.validatePath
 import java.io.File
 import org.codeberg.aimapp.utils.disk.formatImage as formatDiskImage
 import org.codeberg.aimapp.utils.envStatus as envStatusFlow
+import org.codeberg.aimapp.utils.mounts.hasPosixFilesystem as detectPosixFs
 
 
 data class ImportedImage(
@@ -125,8 +126,6 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         _busyCount.map { it != 0 }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     private val _alerts = MutableStateFlow<List<Alert>>(emptyList())
     val alerts: StateFlow<List<Alert>> = _alerts
-    private val _envChecked = MutableStateFlow(false)
-    val envChecked: StateFlow<Boolean> = _envChecked
     private val _images = MutableStateFlow<List<ImageInfo>>(emptyList())
     val images: StateFlow<List<ImageInfo>> = _images
     val envStatus: StateFlow<EnvironmentStatus> = envStatusFlow
@@ -365,7 +364,6 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
         viewModelScope.launch {
             withLockedUI {
                 val status = withContext(Dispatchers.IO) { checkEnvironment() }
-                _envChecked.value = true
                 if (status.ready) refreshAndRebuild()
             }
         }
@@ -465,6 +463,9 @@ class MainActivityViewModel(application: Application) : AndroidViewModel(applica
     fun toggleImageStorageExpose(path: String, expose: Boolean) {
         updateImage(path) { it.copy(exposeInStorage = expose) }
     }
+
+    suspend fun hasPosixFilesystem(path: String): Boolean =
+        withContext(Dispatchers.IO) { detectPosixFs(app, path) }
 
     fun toggleImagePreservePermissions(path: String, preserve: Boolean) {
         if (!preserve) {

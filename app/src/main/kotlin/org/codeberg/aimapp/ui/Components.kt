@@ -78,7 +78,8 @@ fun ImageOptionsDialog(
     onBindDirChange: () -> Unit = {},
     onBindDirReset: () -> Unit = {},
     preservePermissions: Boolean = false,
-    onPreservePermissionsChange: (Boolean) -> Unit = {},
+    showPermissions: Boolean = true,
+    onPreservePermissionsChange: (Boolean) -> Unit = {}
 ) {
     var confirmFormat by remember { mutableStateOf(false) }
     val sheetState = rememberExpandedSheetState()
@@ -129,6 +130,7 @@ fun ImageOptionsDialog(
             GroupedRow(
                 position = positionFor(1, 2),
                 onClick = { onSafChange(!safExposed) },
+                tooltip = "Mounts a SAF provider for the image"
             ) {
                 Text(
                     text = stringResource(R.string.pref_expose_saf_name),
@@ -154,6 +156,7 @@ fun ImageOptionsDialog(
             GroupedRow(
                 position = positionFor(2, 2),
                 onClick = { onStorageChange(!storageExposed) },
+                tooltip = "Mounts the image to internal storage or a custom folder"
             ) {
                 Text(
                     text = stringResource(R.string.pref_expose_storage_name),
@@ -183,6 +186,7 @@ fun ImageOptionsDialog(
                 onLongClick = {
                     if (bindDir != null) onBindDirReset()
                 },
+                tooltip = "You've just reset the bind mount directory!"
             ) {
                 Text(
                     text = bindDir ?: stringResource(R.string.dialog_use_custom_bind),
@@ -191,31 +195,34 @@ fun ImageOptionsDialog(
             if (bindDir != null) {
                 SectionHeader(stringResource(R.string.dialog_bind_dir_reset_hint))
             }
-            SectionHeader(stringResource(R.string.dialog_permissions_heading))
-            GroupedRow(
-                position = CardPosition.Solo,
-                onClick = { onPreservePermissionsChange(!preservePermissions) },
-            ) {
-                Text(
-                    text = stringResource(R.string.pref_preserve_permissions_name),
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = preservePermissions,
-                    thumbContent = {
-                        Icon(
-                            imageVector = if (preservePermissions) Icons.Filled.Check else Icons.Filled.Close,
-                            contentDescription = null,
-                            modifier = Modifier.size(SwitchDefaults.IconSize),
-                        )
-                    },
-                    onCheckedChange = { HapticPatterns.tap(); onPreservePermissionsChange(!preservePermissions) },
-                    modifier = Modifier
-                        .height(21.dp)
-                        .aspectRatio(2f)
-                        .wrapContentSize(Alignment.Center)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
+            if (showPermissions) {
+                SectionHeader(stringResource(R.string.dialog_permissions_heading))
+                GroupedRow(
+                    position = CardPosition.Solo,
+                    onClick = { onPreservePermissionsChange(!preservePermissions) },
+                    tooltip = "Restores POSIX file/folder permissions"
+                ) {
+                    Text(
+                        text = stringResource(R.string.pref_preserve_permissions_name),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = preservePermissions,
+                        thumbContent = {
+                            Icon(
+                                imageVector = if (preservePermissions) Icons.Filled.Check else Icons.Filled.Close,
+                                contentDescription = null,
+                                modifier = Modifier.size(SwitchDefaults.IconSize),
+                            )
+                        },
+                        onCheckedChange = { HapticPatterns.tap(); onPreservePermissionsChange(!preservePermissions) },
+                        modifier = Modifier
+                            .height(21.dp)
+                            .aspectRatio(2f)
+                            .wrapContentSize(Alignment.Center)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
             }
             SectionHeader(stringResource(R.string.dialog_actions_heading))
             val actionCount = (if (showFormat) 1 else 0) + 2
@@ -475,28 +482,61 @@ fun PartitionPickerDialog(
 
 @Composable
 private fun DiskBar(partitions: List<PartitionEntry>, totalBytes: Long) {
+    if (totalBytes <= 0) return
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(20.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .clip(RoundedCornerShape(4.dp)),
     ) {
-        partitions.forEachIndexed { _, part ->
-            val weight = (part.sizeBytes.toFloat() / totalBytes).coerceAtLeast(0.02f)
+        var cursor = 0L
+        partitions.sortedBy { it.offsetBytes }.forEach { part ->
+            val gap = (part.offsetBytes - cursor).coerceAtLeast(0L)
+            // add tolerance for MBR 1mb gaps
+            val visibleGap = gap.toFloat() / totalBytes > 0.010f
+            if (visibleGap) {
+                Box(
+                    modifier = Modifier
+                        .weight(gap.toFloat())
+                        .height(20.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                )
+            }
             Box(
                 modifier = Modifier
-                    .weight(weight)
+                    .weight(part.sizeBytes.toFloat().coerceAtLeast(0.02f))
                     .height(20.dp)
                     .padding(horizontal = 0.5.dp)
+                    .clip(RoundedCornerShape(25))
                     .background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center,
             ) {
-                if (weight > 0.1f) {
+                if (part.sizeBytes.toFloat() / totalBytes > 0.1f) {
                     Text(
                         text = part.label ?: part.typeName,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onPrimary,
+                        maxLines = 1,
+                    )
+                }
+            }
+            cursor = maxOf(cursor, part.offsetBytes + part.sizeBytes)
+        }
+        val trailing = (totalBytes - cursor).coerceAtLeast(0L)
+        if (trailing > 0) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(25))
+                    .weight(trailing.toFloat())
+                    .height(20.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (trailing.toFloat() / totalBytes > 0.1f) {
+                    Text(
+                        text = stringResource(R.string.image_type_raw),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                     )
                 }
@@ -524,3 +564,4 @@ fun SnackbarHost(hostState: SnackbarHostState) {
         }
     }
 }
+

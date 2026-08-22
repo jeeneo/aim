@@ -32,6 +32,7 @@ fun buildMountOpts(fsType: FsType, mode: MountMode): String {
         FsType.VFAT -> "$base,uid=0,gid=0,fmask=0000,dmask=0000,allow_utime=0022,iocharset=utf8"
         FsType.EXFAT -> "$base,uid=0,gid=0,fmask=0000,dmask=0000"
         FsType.ISO9660 -> error("ISO9660 must be read-only; FsType.readOnly invariant violated")
+        FsType.NTFS -> "$base,uid=0,gid=0,fmask=0000,dmask=0000"
         is FsType.OTHER -> base
     }
 }

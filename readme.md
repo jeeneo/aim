@@ -25,8 +25,8 @@ Can be paired with [MSD](https://github.com/chenxiaolong/MSD)
 * Sparse (dynamic) images are not supported
 * Only local files are supported
   - Must be on internal storage or sd card.
-* Device must have filesystem support (most devices do)
-  - Run `cat /proc/filesystems` in a rooted shell to check if they exist.
+* Device must have filesystem support
+  - Run `cat /proc/filesystems` in a rooted shell to see what your kernel supports
 * Only tested on AOSP based ROMs
 
 > [!CAUTION]
@@ -36,7 +36,7 @@ Note: if you use KernelSU or similar root solutions and you encounter issues, pl
 
 ## Usage
 
-1. Download latest version from the [releases page](https://github.com/jeeneo/aim/releases).
+1. Download the latest version from the [releases page](/releases).
 
 2. Grant root permissions
 

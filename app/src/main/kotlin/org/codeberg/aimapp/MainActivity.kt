@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -62,6 +64,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
@@ -99,7 +102,6 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     }
     val isBusy by viewModel.isBusy.collectAsState()
     val envStatus by viewModel.envStatus.collectAsState()
-    val envChecked by viewModel.envChecked.collectAsState()
     val images by viewModel.images.collectAsState()
     val alerts by viewModel.alerts.collectAsState()
     val partitionState by viewModel.partitionPicker.collectAsState()
@@ -132,8 +134,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     ) { viewModel.runEnvCheck() }
     val openStorageSettings = {
         val intent = Intent(
-            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-            Uri.parse("package:$pkgName")
+            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, "package:$pkgName".toUri()
         )
         runCatching { storageSettingsLauncher.launch(intent) }.onFailure {
             runCatching {
@@ -142,9 +143,6 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
         }
         Unit
     }
-
-    val showEnv = envChecked && (!envStatus.ready || !envStatus.storageAvailable)
-    val envRowCount = if (envStatus.storageAvailable) 2 else 3
 
     if (showBindDirEdit) {
         BindDirDialog(
@@ -193,16 +191,16 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
             },
         )
     }
+    val pickerState = partitionState
 
-    val ppState = partitionState
-    if (ppState != null) {
+    if (pickerState != null) {
         PartitionPickerDialog(
-            title = ppState.displayName,
-            partitions = ppState.partitions,
-            totalSizeBytes = ppState.totalSizeBytes,
-            scheme = ppState.scheme,
-            initialSelectedIndex = ppState.selectedPartitionIndex,
-            isMountFlow = ppState.isMountFlow,
+            title = pickerState.displayName,
+            partitions = pickerState.partitions,
+            totalSizeBytes = pickerState.totalSizeBytes,
+            scheme = pickerState.scheme,
+            initialSelectedIndex = pickerState.selectedPartitionIndex,
+            isMountFlow = pickerState.isMountFlow,
             onDismiss = { viewModel.dismissPartitionPicker() },
             onSelect = { partition -> viewModel.selectPartition(partition) },
         )
@@ -211,6 +209,9 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     val dialogImage = images.firstOrNull { it.path == dialogImagePath }
     var showImageBindDirEdit by remember { mutableStateOf<String?>(null) }
     if (dialogImage != null) {
+        val showPermissions by produceState(false, dialogImage.path) {
+            value = viewModel.hasPosixFilesystem(dialogImage.path)
+        }
         ImageOptionsDialog(
             title = dialogImage.displayName,
             onDismiss = { dialogImagePath = null },
@@ -242,10 +243,10 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                 viewModel.setImageBindDir(dialogImage.path, null)
             },
             preservePermissions = dialogImage.preservePermissions,
+            showPermissions = showPermissions,
             onPreservePermissionsChange = { preserve ->
                 viewModel.toggleImagePreservePermissions(dialogImage.path, preserve)
-            },
-        )
+            })
     }
 
     if (showImageBindDirEdit != null) {
@@ -265,7 +266,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     }
 
     val sheetShowing =
-        dialogImagePath != null || showBindDirEdit || showImageBindDirEdit != null || ppState != null
+        dialogImagePath != null || showBindDirEdit || showImageBindDirEdit != null || pickerState != null
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold { padding ->
@@ -281,11 +282,15 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(GroupedListSpacing),
                 ) {
+                    val showEnv = !envStatus.ready || !envStatus.storageAvailable
+                    val envRowCount = if (envStatus.storageAvailable) 2 else 3
                     if (showEnv) {
                         item(key = "cat_env_header") {
                             SectionHeader(text = stringResource(R.string.pref_header_environment))
                             GroupedRow(
-                                position = positionFor(1, envRowCount)
+                                position = positionFor(1, envRowCount),
+                                enabled = !isBusy,
+                                tooltip = stringResource(R.string.pref_header_environment)
                             ) {
                                 GroupedTextContent(
                                     title = stringResource(R.string.pref_root_busybox_status_name),
@@ -307,7 +312,9 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                             item(key = "cat_env_storage") {
                                 GroupedRow(
                                     position = positionFor(2, envRowCount),
-                                    onClick = if (!isBusy) openStorageSettings else null,
+                                    onClick = openStorageSettings,
+                                    enabled = !isBusy,
+                                    tooltip = envStatus.storageMessage,
                                 ) {
                                     GroupedTextContent(
                                         title = stringResource(R.string.pref_storage_access_name),
@@ -320,7 +327,9 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                         item(key = "cat_env_body") {
                             GroupedRow(
                                 position = positionFor(envRowCount, envRowCount),
-                                onClick = if (!isBusy) ({ viewModel.runEnvCheck() }) else null,
+                                onClick = { viewModel.runEnvCheck() },
+                                enabled = !isBusy,
+                                tooltip = stringResource(R.string.pref_retry_checks_name)
                             ) {
                                 GroupedTextContent(
                                     title = stringResource(R.string.pref_retry_checks_name),
@@ -335,12 +344,9 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                         GroupedRow(
                             position = positionFor(
                                 1, totalRows
-                            ),
-                            enabled = !isBusy,
-                            onClick = if (!isBusy) {
+                            ), enabled = !isBusy && !showEnv, onClick = if (!isBusy) {
                                 { picker.launch(arrayOf("application/octet-stream", "*/*")) }
-                            } else null,
-                        ) {
+                            } else null, tooltip = stringResource(R.string.pref_add_image_name)) {
                             GroupedTextContent(
                                 title = stringResource(R.string.pref_add_image_name),
                                 summary = stringResource(R.string.pref_add_image_desc),
@@ -355,16 +361,23 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                             ),
                             enabled = !isBusy,
                             onClick = { dialogImagePath = img.path },
+                            tooltip = "Opens the image options sheet"
                         ) {
                             GroupedTextContent(
                                 title = img.displayName,
                                 summary = img.path,
                                 modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                            )
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp),
                             )
                             VerticalDivider(
                                 modifier = Modifier
                                     .height(38.dp)
-                                    .padding(horizontal = 12.dp)
+                                    .padding(end = 10.dp)
                                     .clip(RoundedCornerShape(50)),
                                 thickness = 3.dp,
                                 color = MaterialTheme.colorScheme.outlineVariant,
@@ -396,6 +409,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                             GroupedRow(
                                 position = positionFor(1, 2),
                                 enabled = false,
+                                tooltip = stringResource(R.string.main_no_mounts),
                             ) {
                                 GroupedTextContent(
                                     title = stringResource(R.string.main_no_mounts), summary = null
@@ -414,6 +428,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                                 ),
                                 enabled = !isBusy,
                                 onClick = { dialogImagePath = img.path },
+                                tooltip = "Mount path for ${img.displayName}. Opens the image options sheet"
                             ) {
                                 val stem = img.mountedImage?.mountPoint?.substringAfterLast('/')
                                     ?: img.displayName
@@ -443,7 +458,9 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                         GroupedRow(
                             position = positionFor(2, 2),
                             enabled = !isBusy && envStatus.ready && images.isNotEmpty(),
-                            onClick = { viewModel.applySettings() }) {
+                            onClick = { viewModel.applySettings() },
+                            tooltip = "Applies current settings"
+                        ) {
                             Column {
                                 Text(
                                     text = stringResource(R.string.main_apply_mounts),
@@ -466,7 +483,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                             onLongClick = if (!isBusy) {
                                 { viewModel.setBindDir(MainActivityViewModel.DEFAULT_BIND_DIR) }
                             } else null,
-                        ) {
+                            tooltip = "You've just reset the bind mount folder!") {
                             GroupedTextContent(
                                 title = stringResource(R.string.pref_bindmount_dir_name),
                                 summary = bindDir,
@@ -479,6 +496,7 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                         GroupedRow(
                             position = CardPosition.Solo,
                             onClick = { uriHandler.openUri("https://github.com/jeeneo/aim") },
+                            tooltip = "Yes hello"
                         ) {
                             GroupedTextContent(
                                 title = stringResource(R.string.main_version_name),
@@ -512,6 +530,7 @@ private fun GroupedTextContent(
     title: String,
     summary: String? = null,
     summaryColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    maxLines: Int = 2,
 ) {
     Column(
         modifier = modifier,
@@ -530,7 +549,7 @@ private fun GroupedTextContent(
                 text = summary,
                 style = MaterialTheme.typography.bodyMedium,
                 color = summaryColor,
-                maxLines = 2,
+                maxLines = maxLines,
                 overflow = TextOverflow.Ellipsis,
             )
         }
