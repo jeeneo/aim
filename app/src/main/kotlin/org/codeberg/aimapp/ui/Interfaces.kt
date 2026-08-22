@@ -2,14 +2,19 @@ package org.codeberg.aimapp.ui
 
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -31,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -61,6 +67,9 @@ fun positionFor(index: Int, count: Int): CardPosition = when {
     else -> CardPosition.Center
 }
 
+inline fun Modifier.thenIf(condition: Boolean, factory: Modifier.() -> Modifier): Modifier =
+    if (condition) factory() else this
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun GroupedRow(
@@ -89,34 +98,31 @@ fun GroupedRow(
         MaterialTheme.colorScheme.surfaceContainerHigh
     }
     val row = @Composable {
-        Row(
-            modifier = modifier
-                .fillMaxWidth()
-                .clip(shape)
-                .alpha(if (enabled) 1f else 0.6f)
-                .background(background, shape)
-                .then(
-                    when {
-                        (onClick != null || onLongClick != null) && enabled -> Modifier.combinedClickable(
+        Box(modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .alpha(if (enabled) 1f else 0.6f)
+                    .background(background, shape)
+                    .thenIf(enabled && (onClick != null || onLongClick != null)) {
+                        combinedClickable(
                             interactionSource = interactionSource,
                             indication = LocalIndication.current,
                             onClick = { HapticPatterns.tap(); onClick?.invoke() },
                             onLongClick = onLongClick,
                         )
-
-                        else -> Modifier
                     }
-                )
-                .padding(
-                    horizontal = horizontalPadding,
-                    vertical = verticalPadding,
-                ),
-            horizontalArrangement = horizontalArrangement,
-            verticalAlignment = Alignment.CenterVertically,
-            content = content,
-        )
+                    .padding(
+                        horizontal = horizontalPadding,
+                        vertical = verticalPadding,
+                    ),
+                horizontalArrangement = horizontalArrangement,
+                verticalAlignment = Alignment.CenterVertically,
+                content = content,
+            )
+        }
     }
-
     if (tooltip.isNotEmpty()) {
         val tooltipState = rememberTooltipState()
         TooltipBox(
