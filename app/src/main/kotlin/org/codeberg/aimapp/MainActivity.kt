@@ -17,6 +17,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,6 +38,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
@@ -70,16 +72,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.codeberg.aimapp.AimApplication.Companion.ctx
 import org.codeberg.aimapp.ui.BindDirDialog
-import org.codeberg.aimapp.ui.CardPosition
 import org.codeberg.aimapp.ui.GroupedListSpacing
-import org.codeberg.aimapp.ui.GroupedRow
 import org.codeberg.aimapp.ui.HapticPatterns
 import org.codeberg.aimapp.ui.ImageOptionsDialog
 import org.codeberg.aimapp.ui.PartitionPickerDialog
 import org.codeberg.aimapp.ui.SectionHeader
+import org.codeberg.aimapp.ui.SegmentedTooltipItem
 import org.codeberg.aimapp.ui.SnackbarHost
-import org.codeberg.aimapp.ui.positionFor
 import org.codeberg.aimapp.ui.screenContentPadding
+import org.codeberg.aimapp.ui.segmentedListShapes
 import org.codeberg.aimapp.ui.theme.AimTheme
 
 class MainActivity : ComponentActivity() {
@@ -108,6 +109,11 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
     val bindDir by viewModel.bindDir.collectAsState()
     val pkgName = LocalContext.current.packageName
     val snackbarHostState = remember { SnackbarHostState() }
+    val segmentedItemColors = ListItemDefaults.segmentedColors(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        selectedContainerColor = MaterialTheme.colorScheme.inversePrimary,
+        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainer
+    )
     val scope = rememberCoroutineScope()
     var dialogImagePath by remember { mutableStateOf<String?>(null) }
     var showBindDirEdit by remember { mutableStateOf(false) }
@@ -287,8 +293,9 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                     if (showEnv) {
                         item(key = "cat_env_header") {
                             SectionHeader(text = stringResource(R.string.pref_header_environment))
-                            GroupedRow(
-                                position = positionFor(1, envRowCount),
+                            SegmentedTooltipItem(
+                                shapes = segmentedListShapes(1, envRowCount),
+                                colors = segmentedItemColors,
                                 enabled = !isBusy,
                                 tooltip = stringResource(R.string.pref_header_environment)
                             ) {
@@ -310,9 +317,13 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                         }
                         if (!envStatus.storageAvailable) {
                             item(key = "cat_env_storage") {
-                                GroupedRow(
-                                    position = positionFor(2, envRowCount),
-                                    onClick = openStorageSettings,
+                                SegmentedTooltipItem(
+                                    shapes = segmentedListShapes(2, envRowCount),
+                                    colors = segmentedItemColors,
+                                    onClick = {
+                                        HapticPatterns.tap()
+                                        openStorageSettings()
+                                    },
                                     enabled = !isBusy,
                                     tooltip = envStatus.storageMessage,
                                 ) {
@@ -325,9 +336,13 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                             }
                         }
                         item(key = "cat_env_body") {
-                            GroupedRow(
-                                position = positionFor(envRowCount, envRowCount),
-                                onClick = { viewModel.runEnvCheck() },
+                            SegmentedTooltipItem(
+                                shapes = segmentedListShapes(envRowCount, envRowCount),
+                                colors = segmentedItemColors,
+                                onClick = {
+                                    HapticPatterns.tap()
+                                    viewModel.runEnvCheck()
+                                },
                                 enabled = !isBusy,
                                 tooltip = stringResource(R.string.pref_retry_checks_name)
                             ) {
@@ -341,12 +356,17 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                     val totalRows = images.size + 1
                     item(key = "cat_images") {
                         SectionHeader(text = stringResource(R.string.pref_header_images))
-                        GroupedRow(
-                            position = positionFor(
-                                1, totalRows
-                            ), enabled = !isBusy && !showEnv, onClick = if (!isBusy) {
-                                { picker.launch(arrayOf("application/octet-stream", "*/*")) }
-                            } else null, tooltip = stringResource(R.string.pref_add_image_name)) {
+                        SegmentedTooltipItem(
+                            shapes = segmentedListShapes(1, totalRows),
+                            colors = segmentedItemColors,
+                            enabled = !isBusy && !showEnv,
+                            onClick = if (!isBusy) {
+                                {
+                                    HapticPatterns.tap()
+                                    picker.launch(arrayOf("application/octet-stream", "*/*"))
+                                }
+                            } else null,
+                            tooltip = stringResource(R.string.pref_add_image_name)) {
                             GroupedTextContent(
                                 title = stringResource(R.string.pref_add_image_name),
                                 summary = stringResource(R.string.pref_add_image_desc),
@@ -355,50 +375,59 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                     }
                     itemsIndexed(
                         items = images, key = { _, img -> "img_${img.path}" }) { index, img ->
-                        GroupedRow(
-                            position = positionFor(
+                        SegmentedTooltipItem(
+                            shapes = segmentedListShapes(
                                 index + 2, totalRows
                             ),
+                            colors = segmentedItemColors,
                             enabled = !isBusy,
-                            onClick = { dialogImagePath = img.path },
-                            tooltip = "Opens the image options sheet"
-                        ) {
-                            GroupedTextContent(
-                                title = img.displayName,
-                                summary = img.path,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                            )
-                            Icon(
-                                imageVector = Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                modifier = Modifier.size(32.dp),
-                            )
-                            VerticalDivider(
-                                modifier = Modifier
-                                    .height(38.dp)
-                                    .padding(end = 10.dp)
-                                    .clip(RoundedCornerShape(50)),
-                                thickness = 3.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                            )
-                            Switch(
-                                checked = img.enabled,
-                                enabled = !isBusy && envStatus.ready,
-                                thumbContent = {
+                            onClick = {
+                                HapticPatterns.tap()
+                                dialogImagePath = img.path
+                            },
+                            tooltip = "Opens the image options sheet",
+                            content = {
+                                GroupedTextContent(
+                                    title = img.displayName,
+                                    summary = img.path,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 1,
+                                )
+                            },
+                            trailingContent = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        imageVector = if (img.enabled) Icons.Filled.Check else Icons.Filled.Close,
+                                        imageVector = Icons.Rounded.ChevronRight,
                                         contentDescription = null,
-                                        modifier = Modifier.size(SwitchDefaults.IconSize),
+                                        modifier = Modifier.size(32.dp),
                                     )
-                                },
-                                onCheckedChange = { enabled ->
-                                    HapticPatterns.tap()
-                                    viewModel.toggleImage(img.path, enabled)
-                                },
-                                modifier = Modifier.padding(end = 2.dp),
-                            )
-                        }
+                                    VerticalDivider(
+                                        modifier = Modifier
+                                            .height(38.dp)
+                                            .padding(end = 10.dp)
+                                            .clip(RoundedCornerShape(50)),
+                                        thickness = 3.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant,
+                                    )
+                                    Switch(
+                                        checked = img.enabled,
+                                        enabled = !isBusy && envStatus.ready,
+                                        thumbContent = {
+                                            Icon(
+                                                imageVector = if (img.enabled) Icons.Filled.Check else Icons.Filled.Close,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(SwitchDefaults.IconSize),
+                                            )
+                                        },
+                                        onCheckedChange = { enabled ->
+                                            HapticPatterns.tap()
+                                            viewModel.toggleImage(img.path, enabled)
+                                        },
+                                        modifier = Modifier.padding(end = 2.dp),
+                                    )
+                                }
+                            },
+                        )
                     }
                     val mountedImages = images.filter { it.isMounted }
                     item(key = "cat_active_mounts") {
@@ -406,8 +435,9 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                     }
                     if (mountedImages.isEmpty()) {
                         item(key = "no_active_mounts") {
-                            GroupedRow(
-                                position = positionFor(1, 2),
+                            SegmentedTooltipItem(
+                                shapes = segmentedListShapes(1, 2),
+                                colors = segmentedItemColors,
                                 enabled = false,
                                 tooltip = stringResource(R.string.main_no_mounts),
                             ) {
@@ -422,12 +452,16 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                             key = { index -> mountedImages[index].path }) { index ->
                             val img = mountedImages[index]
                             val totalCount = mountedImages.size + 1
-                            GroupedRow(
-                                position = positionFor(
+                            SegmentedTooltipItem(
+                                shapes = segmentedListShapes(
                                     index + 1, totalCount
                                 ),
+                                colors = segmentedItemColors,
                                 enabled = !isBusy,
-                                onClick = { dialogImagePath = img.path },
+                                onClick = {
+                                    HapticPatterns.tap()
+                                    dialogImagePath = img.path
+                                },
                                 tooltip = "Mount path for ${img.displayName}. Opens the image options sheet"
                             ) {
                                 val stem = img.mountedImage?.mountPoint?.substringAfterLast('/')
@@ -455,10 +489,14 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                         }
                     }
                     item(key = "apply_settings") {
-                        GroupedRow(
-                            position = positionFor(2, 2),
+                        SegmentedTooltipItem(
+                            shapes = segmentedListShapes(2, 2),
+                            colors = segmentedItemColors,
                             enabled = !isBusy && envStatus.ready && images.isNotEmpty(),
-                            onClick = { viewModel.applySettings() },
+                            onClick = {
+                                HapticPatterns.tap()
+                                viewModel.applySettings()
+                            },
                             tooltip = "Applies current settings"
                         ) {
                             Column {
@@ -477,11 +515,18 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                     }
                     item(key = "cat_settings") {
                         SectionHeader(text = stringResource(R.string.pref_header_settings))
-                        GroupedRow(
-                            position = CardPosition.Solo,
-                            onClick = if (!isBusy) ({ showBindDirEdit = true }) else null,
+                        SegmentedTooltipItem(
+                            shapes = segmentedListShapes(1, 1),
+                            colors = segmentedItemColors,
+                            onClick = if (!isBusy) ({
+                                HapticPatterns.tap()
+                                showBindDirEdit = true
+                            }) else null,
                             onLongClick = if (!isBusy) {
-                                { viewModel.setBindDir(MainActivityViewModel.DEFAULT_BIND_DIR) }
+                                {
+                                    HapticPatterns.tap()
+                                    viewModel.setBindDir(MainActivityViewModel.DEFAULT_BIND_DIR)
+                                }
                             } else null,
                             tooltip = "You've just reset the bind mount folder!") {
                             GroupedTextContent(
@@ -493,9 +538,13 @@ fun AimApp(viewModel: MainActivityViewModel = viewModel()) {
                     item(key = "cat_about") {
                         SectionHeader(text = stringResource(R.string.pref_header_about))
                         val uriHandler = LocalUriHandler.current
-                        GroupedRow(
-                            position = CardPosition.Solo,
-                            onClick = { uriHandler.openUri("https://github.com/jeeneo/aim") },
+                        SegmentedTooltipItem(
+                            shapes = segmentedListShapes(1, 1),
+                            colors = segmentedItemColors,
+                            onClick = {
+                                HapticPatterns.tap()
+                                uriHandler.openUri("https://github.com/jeeneo/aim")
+                            },
                             tooltip = "Yes hello"
                         ) {
                             GroupedTextContent(

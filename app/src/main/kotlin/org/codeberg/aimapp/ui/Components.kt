@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
@@ -83,6 +84,11 @@ fun ImageOptionsDialog(
 ) {
     var confirmFormat by remember { mutableStateOf(false) }
     val sheetState = rememberExpandedSheetState()
+    val segmentedItemColors = ListItemDefaults.segmentedColors(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        selectedContainerColor = MaterialTheme.colorScheme.inversePrimary,
+        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainer
+    )
     if (confirmFormat) {
         ModalBottomSheet(
             onDismissRequest = { confirmFormat = false }, sheetState = rememberExpandedSheetState()
@@ -98,9 +104,14 @@ fun ImageOptionsDialog(
                 SectionHeader(stringResource(R.string.dialog_format_fs_label))
                 listOf("ext4", "exFAT").forEachIndexed { index, fsType ->
                     Spacer(modifier = Modifier.height(GroupedListSpacing))
-                    GroupedRow(
-                        position = positionFor(index + 1, 2),
-                        onClick = { confirmFormat = false; onFormat(fsType) },
+                    SegmentedTooltipItem(
+                        shapes = segmentedListShapes(index + 1, 2),
+                        colors = segmentedItemColors,
+                        onClick = {
+                            HapticPatterns.tap()
+                            confirmFormat = false
+                            onFormat(fsType)
+                        },
                     ) {
                         Text(
                             text = fsType,
@@ -127,63 +138,78 @@ fun ImageOptionsDialog(
                 overflow = TextOverflow.Ellipsis,
             )
             SectionHeader(stringResource(R.string.dialog_expose_heading))
-            GroupedRow(
-                position = positionFor(1, 2),
-                onClick = { onSafChange(!safExposed) },
-                tooltip = "Mounts a SAF provider for the image"
-            ) {
-                Text(
-                    text = stringResource(R.string.pref_expose_saf_name),
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = safExposed,
-                    thumbContent = {
-                        Icon(
-                            imageVector = if (safExposed) Icons.Filled.Check else Icons.Filled.Close,
-                            contentDescription = null,
-                            modifier = Modifier.size(SwitchDefaults.IconSize),
-                        )
-                    },
-                    onCheckedChange = { HapticPatterns.tap(); onSafChange(!safExposed) },
-                    modifier = Modifier
-                        .height(21.dp)
-                        .aspectRatio(2f)
-                        .wrapContentSize(Alignment.Center)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-            }
-            GroupedRow(
-                position = positionFor(2, 2),
-                onClick = { onStorageChange(!storageExposed) },
-                tooltip = "Mounts the image to internal storage or a custom folder"
-            ) {
-                Text(
-                    text = stringResource(R.string.pref_expose_storage_name),
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = storageExposed,
-                    thumbContent = {
-                        Icon(
-                            imageVector = if (storageExposed) Icons.Filled.Check else Icons.Filled.Close,
-                            contentDescription = null,
-                            modifier = Modifier.size(SwitchDefaults.IconSize),
-                        )
-                    },
-                    onCheckedChange = { HapticPatterns.tap(); onStorageChange(!storageExposed) },
-                    modifier = Modifier
-                        .height(21.dp)
-                        .aspectRatio(2f)
-                        .wrapContentSize(Alignment.Center)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-            }
+            SegmentedTooltipItem(
+                shapes = segmentedListShapes(1, 2),
+                colors = segmentedItemColors,
+                onClick = {
+                    HapticPatterns.tap()
+                    onSafChange(!safExposed)
+                },
+                tooltip = "Mounts a SAF provider for the image",
+                content = {
+                    Text(
+                        text = stringResource(R.string.pref_expose_saf_name),
+                    )
+                },
+                trailingContent = {
+                    Switch(
+                        checked = safExposed,
+                        thumbContent = {
+                            Icon(
+                                imageVector = if (safExposed) Icons.Filled.Check else Icons.Filled.Close,
+                                contentDescription = null,
+                                modifier = Modifier.size(SwitchDefaults.IconSize),
+                            )
+                        },
+                        onCheckedChange = { HapticPatterns.tap(); onSafChange(!safExposed) },
+                        modifier = Modifier
+                            .height(21.dp)
+                            .aspectRatio(2f)
+                            .wrapContentSize(Alignment.Center)
+                    )
+                },
+            )
+            SegmentedTooltipItem(
+                shapes = segmentedListShapes(2, 2),
+                colors = segmentedItemColors,
+                onClick = {
+                    HapticPatterns.tap()
+                    onStorageChange(!storageExposed)
+                },
+                tooltip = "Mounts the image to internal storage or a custom folder",
+                content = {
+                    Text(
+                        text = stringResource(R.string.pref_expose_storage_name),
+                    )
+                },
+                trailingContent = {
+                    Switch(
+                        checked = storageExposed,
+                        thumbContent = {
+                            Icon(
+                                imageVector = if (storageExposed) Icons.Filled.Check else Icons.Filled.Close,
+                                contentDescription = null,
+                                modifier = Modifier.size(SwitchDefaults.IconSize),
+                            )
+                        },
+                        onCheckedChange = { HapticPatterns.tap(); onStorageChange(!storageExposed) },
+                        modifier = Modifier
+                            .height(21.dp)
+                            .aspectRatio(2f)
+                            .wrapContentSize(Alignment.Center)
+                    )
+                },
+            )
             SectionHeader(stringResource(R.string.dialog_bind_dir_custom_name))
-            GroupedRow(
-                position = CardPosition.Solo,
-                onClick = { onBindDirChange() },
+            SegmentedTooltipItem(
+                shapes = segmentedListShapes(1, 1),
+                colors = segmentedItemColors,
+                onClick = {
+                    HapticPatterns.tap()
+                    onBindDirChange()
+                },
                 onLongClick = {
+                    HapticPatterns.tap()
                     if (bindDir != null) onBindDirReset()
                 },
                 tooltip = "You've just reset the bind mount directory!"
@@ -197,41 +223,50 @@ fun ImageOptionsDialog(
             }
             if (showPermissions) {
                 SectionHeader(stringResource(R.string.dialog_permissions_heading))
-                GroupedRow(
-                    position = CardPosition.Solo,
-                    onClick = { onPreservePermissionsChange(!preservePermissions) },
-                    tooltip = "Restores POSIX file/folder permissions"
-                ) {
-                    Text(
-                        text = stringResource(R.string.pref_preserve_permissions_name),
-                        modifier = Modifier.weight(1f),
-                    )
-                    Switch(
-                        checked = preservePermissions,
-                        thumbContent = {
-                            Icon(
-                                imageVector = if (preservePermissions) Icons.Filled.Check else Icons.Filled.Close,
-                                contentDescription = null,
-                                modifier = Modifier.size(SwitchDefaults.IconSize),
-                            )
-                        },
-                        onCheckedChange = { HapticPatterns.tap(); onPreservePermissionsChange(!preservePermissions) },
-                        modifier = Modifier
-                            .height(21.dp)
-                            .aspectRatio(2f)
-                            .wrapContentSize(Alignment.Center)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                }
+                SegmentedTooltipItem(
+                    shapes = segmentedListShapes(1, 1),
+                    colors = segmentedItemColors,
+                    onClick = {
+                        HapticPatterns.tap()
+                        onPreservePermissionsChange(!preservePermissions)
+                    },
+                    tooltip = "Restores POSIX file/folder permissions",
+                    content = {
+                        Text(
+                            text = stringResource(R.string.pref_preserve_permissions_name),
+                        )
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = preservePermissions,
+                            thumbContent = {
+                                Icon(
+                                    imageVector = if (preservePermissions) Icons.Filled.Check else Icons.Filled.Close,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize),
+                                )
+                            },
+                            onCheckedChange = { HapticPatterns.tap(); onPreservePermissionsChange(!preservePermissions) },
+                            modifier = Modifier
+                                .height(21.dp)
+                                .aspectRatio(2f)
+                                .wrapContentSize(Alignment.Center)
+                        )
+                    },
+                )
             }
             SectionHeader(stringResource(R.string.dialog_actions_heading))
             val actionCount = (if (showFormat) 1 else 0) + 2
             var actionIndex = 0
             if (showFormat) {
                 actionIndex += 1
-                GroupedRow(
-                    position = positionFor(actionIndex, actionCount),
-                    onClick = { confirmFormat = true },
+                SegmentedTooltipItem(
+                    shapes = segmentedListShapes(actionIndex, actionCount),
+                    colors = segmentedItemColors,
+                    onClick = {
+                        HapticPatterns.tap()
+                        confirmFormat = true
+                    },
                 ) {
                     Text(
                         text = stringResource(R.string.pref_format_image_name),
@@ -239,9 +274,13 @@ fun ImageOptionsDialog(
                 }
             }
             actionIndex += 1
-            GroupedRow(
-                position = positionFor(actionIndex, actionCount),
-                onClick = { onChangePartition() },
+            SegmentedTooltipItem(
+                shapes = segmentedListShapes(actionIndex, actionCount),
+                colors = segmentedItemColors,
+                onClick = {
+                    HapticPatterns.tap()
+                    onChangePartition()
+                },
             ) {
                 Text(
                     text = if (isMultipart) stringResource(R.string.pref_change_partition_name)
@@ -249,9 +288,13 @@ fun ImageOptionsDialog(
                 )
             }
             actionIndex += 1
-            GroupedRow(
-                position = positionFor(actionIndex, actionCount),
-                onClick = { onRemove() },
+            SegmentedTooltipItem(
+                shapes = segmentedListShapes(actionIndex, actionCount),
+                colors = segmentedItemColors,
+                onClick = {
+                    HapticPatterns.tap()
+                    onRemove()
+                },
             ) {
                 Text(
                     text = stringResource(R.string.dialog_remove_image),
@@ -359,6 +402,11 @@ fun PartitionPickerDialog(
     onSelect: (PartitionEntry) -> Unit,
 ) {
     val multipart = partitions.size >= 2
+    val segmentedItemColors = ListItemDefaults.segmentedColors(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        selectedContainerColor = MaterialTheme.colorScheme.inversePrimary,
+        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainer
+    )
     val savedIndex =
         initialSelectedIndex?.let { idx -> partitions.indexOfFirst { it.index == idx } }
             ?.takeIf { it >= 0 }
@@ -394,7 +442,7 @@ fun PartitionPickerDialog(
                 modifier = Modifier
                     .weight(1f, fill = false)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(GroupedListSpacing),
             ) {
                 val barTotal =
                     if (totalSizeBytes > 0) totalSizeBytes else partitions.maxOfOrNull { it.offsetBytes + it.sizeBytes }
@@ -406,71 +454,77 @@ fun PartitionPickerDialog(
                     val supported = part.detectedFs != null
                     val selected = if (multipart) supported && savedIndex == index else supported
                     val enabled = supported && multipart
-                    GroupedRow(
-                        position = positionFor(index + 1, totalPartitions),
-                        onClick = { onSelect(part) },
+                    SegmentedTooltipItem(
+                        shapes = segmentedListShapes(index + 1, totalPartitions),
+                        colors = segmentedItemColors,
                         enabled = enabled,
-                        selected = selected
+                        selected = selected,
+                        onClick = {
+                            HapticPatterns.tap()
+                            onSelect(part)
+                        },
                     ) {
-                        RadioButton(
-                            selected = selected,
-                            onClick = null,
-                            enabled = enabled,
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = part.label ?: stringResource(
-                                        R.string.partition_label_part, part.index
-                                    ),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "(${part.typeName})",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                if (part.bootable) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = stringResource(R.string.dialog_partition_boot),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                                if (!supported) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = stringResource(R.string.dialog_partition_unsupported),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.error,
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Row {
-                                Text(
-                                    text = formatSize(part.sizeBytes),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            val fraction =
-                                if (barTotal > 0) (part.sizeBytes.toFloat() / barTotal).coerceIn(
-                                    0.01f, 1f
-                                ) else 0.01f
-                            LinearProgressIndicator(
-                                progress = { fraction },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(4.dp)
-                                    .clip(RoundedCornerShape(2.dp)),
-                                color = MaterialTheme.colorScheme.secondary,
-                                trackColor = MaterialTheme.colorScheme.outlineVariant,
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = selected,
+                                onClick = null,
+                                enabled = enabled,
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = part.label ?: stringResource(
+                                            R.string.partition_label_part, part.index
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "(${part.typeName})",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    if (part.bootable) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = stringResource(R.string.dialog_partition_boot),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                    if (!supported) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = stringResource(R.string.dialog_partition_unsupported),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row {
+                                    Text(
+                                        text = formatSize(part.sizeBytes),
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                val fraction =
+                                    if (barTotal > 0) (part.sizeBytes.toFloat() / barTotal).coerceIn(
+                                        0.01f, 1f
+                                    ) else 0.01f
+                                LinearProgressIndicator(
+                                    progress = { fraction },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp)),
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    trackColor = MaterialTheme.colorScheme.outlineVariant,
+                                )
+                            }
                         }
                     }
                 }
