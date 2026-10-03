@@ -30,7 +30,7 @@ private val ALLOWED_BINARIES = setOf(
     // file attributes and searching
     "chmod", "chown", "chcon", "find", "test",
     // utilities
-    "busybox", // lol
+    "busybox", "toybox", // lol
     "blkid", "stat", "grep", "awk", "ls", "head", "cat", "id", "command", "echo",
     // formatting
     "mke2fs", "mkfs.ext4", "mkfs.exfat", "mkexfatfs",
